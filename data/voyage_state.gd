@@ -23,18 +23,30 @@ var exploration_sites: Array[Dictionary] = []
 var enemies: Array[Dictionary] = []
 var ammunition: int = 0
 var equipment_levels: Dictionary = {"cannons": 0, "sails": 0, "hull": 0}
+var relics: Array[String] = []
+var repair_stock: int = 0
+var ration_stock: int = 0
+var ration_burst_actions: int = 0
+var bosses_defeated: int = 0
 var reef_position: Vector2i = Vector2i(5, 5) # Compatibility alias for the first reef.
 var wind_direction: Vector2i = Vector2i.RIGHT # Display-only environmental condition; never restricts course.
 var extraction_gold_reward: int = 0
 var last_action_message: String = ""
 
-func start_new_voyage(p_tier: int, p_seed: int, p_ship_id: String = "wooden_sloop", p_background: String = "merchant", p_equipment: Dictionary = {}, p_ammunition: int = 0) -> void:
+func start_new_voyage(p_tier: int, p_seed: int, p_ship_id: String = "wooden_sloop", p_background: String = "merchant", p_equipment: Dictionary = {}, p_ammunition: int = 0, p_relics: Array = [], p_repairs: int = 0, p_rations: int = 0) -> void:
 	is_active = true
 	tier = clampi(p_tier, 1, 4)
 	seed_value = p_seed
 	ship_id = p_ship_id
 	captain_background = p_background
 	equipment_levels = p_equipment.duplicate(true)
+	relics.clear()
+	for relic in p_relics:
+		if not relics.has(str(relic)): relics.append(str(relic))
+	repair_stock = maxi(0, p_repairs)
+	ration_stock = maxi(0, p_rations)
+	ration_burst_actions = 0
+	bosses_defeated = 0
 	current_hull_hp = max_hull_hp()
 	ammunition = maxi(0, p_ammunition)
 	ship_cargo.clear()
@@ -105,20 +117,25 @@ func _random_open_position(rng: RandomNumberGenerator) -> Vector2i:
 
 func movement_range() -> int:
 	var background_bonus: int = 1 if captain_background == "navigator" else 0
-	return maxi(1, int(Constants.SHIPS.get(ship_id, {}).get("movement_range", 1)) + background_bonus + int(equipment_levels.get("sails", 0)))
+	return maxi(1, int(Constants.SHIPS.get(ship_id, {}).get("movement_range", 1)) + background_bonus + int(equipment_levels.get("sails", 0)) + (1 if relics.has("storm_compass") else 0) + (1 if ration_burst_actions > 0 else 0))
 
 func max_hull_hp() -> int:
-	return int(Constants.SHIPS.get(ship_id, {}).get("max_hp", 100)) + 50 * int(equipment_levels.get("hull", 0))
+	return int(Constants.SHIPS.get(ship_id, {}).get("max_hp", 100)) + 50 * int(equipment_levels.get("hull", 0)) + (25 if relics.has("sea_serpent_scale") else 0)
 
 func cannon_damage() -> int:
-	return int(Constants.CANNON_BASE_DAMAGE) + 15 * int(equipment_levels.get("cannons", 0))
+	return int(Constants.CANNON_BASE_DAMAGE) + 15 * int(equipment_levels.get("cannons", 0)) + (5 if relics.has("dreadnought_insignia") else 0)
 
 func _generate_enemies(rng: RandomNumberGenerator) -> void:
-	var count: int = int(Constants.ENEMY_COUNTS_BY_TIER.get(tier, 1))
+	var count: int = int(Constants.ENEMY_COUNTS_BY_TIER.get(tier, 1)) + (1 if tier >= 3 else 0)
 	for index in range(count):
 		var position := _random_open_position(rng)
 		var kind: String = "pirate_sloop" if tier < 3 or index % 2 == 0 else "pirate_galleon"
-		enemies.append({"id": "enemy_%d" % index, "type": kind, "position": _vector_to_array(position), "hull": int(Constants.ENEMY_HULL_BY_TIER.get(tier, 60)), "max_hull": int(Constants.ENEMY_HULL_BY_TIER.get(tier, 60)), "damage": int(Constants.ENEMY_DAMAGE_BY_TIER.get(tier, 12)), "loot_gold": int(Constants.ENEMY_LOOT_BY_TIER.get(tier, 150)), "alive": true})
+		var boss: bool = tier >= 3 and index == count - 1
+		var boss_type: String = "sea_monster" if tier == 3 else "dreadnought_captain"
+		var hull: int = int(Constants.BOSS_HULL_BY_TIER[tier]) if boss else int(Constants.ENEMY_HULL_BY_TIER.get(tier, 60))
+		var damage: int = int(Constants.BOSS_DAMAGE_BY_TIER[tier]) if boss else int(Constants.ENEMY_DAMAGE_BY_TIER.get(tier, 12))
+		var loot: int = int(Constants.BOSS_LOOT_BY_TIER[tier]) if boss else int(Constants.ENEMY_LOOT_BY_TIER.get(tier, 150))
+		enemies.append({"id": "boss_%d" % tier if boss else "enemy_%d" % index, "type": boss_type if boss else kind, "boss": boss, "position": _vector_to_array(position), "hull": hull, "max_hull": hull, "damage": damage, "loot_gold": loot, "relic_id": "sea_serpent_scale" if boss and tier == 3 else ("dreadnought_insignia" if boss else ""), "alive": true})
 
 func enemy_at(position: Vector2i) -> Dictionary:
 	for enemy in enemies:
@@ -146,6 +163,12 @@ func fire_at(position: Vector2i) -> Dictionary:
 		enemy["alive"] = false
 		ship_cargo.append({"item_id": "gold_coin", "qty": int(enemy.get("loot_gold", 0))})
 		message += " Enemy defeated; %d Gold recovered as salvage." % int(enemy.loot_gold)
+		if bool(enemy.get("boss", false)):
+			bosses_defeated += 1
+			var relic_id: String = str(enemy.get("relic_id", ""))
+			if not relic_id.is_empty():
+				ship_cargo.append({"item_id": relic_id, "qty": 1})
+				message += " Unique relic recovered: %s!" % str(Constants.ITEMS.get(relic_id, {}).get("name", relic_id))
 	var retaliation: int = _enemy_attacks()
 	if retaliation > 0:
 		message += " Enemy return fire deals %d hull damage." % retaliation
@@ -156,6 +179,43 @@ func fire_at(position: Vector2i) -> Dictionary:
 		message += " The ship sank; unbanked cargo was lost."
 	last_action_message = message
 	return {"success": true, "message": message, "sunk": sunk, "extracted": false, "hull_damage": retaliation, "enemy_defeated": not bool(enemy.alive), "ammunition": ammunition}
+
+func use_field_repair() -> Dictionary:
+	if not is_active: return _action_result(false, "No active voyage.")
+	if repair_stock <= 0: return _action_result(false, "No repair planks remain.")
+	if current_hull_hp >= max_hull_hp(): return _action_result(false, "Hull is already at maximum durability.")
+	repair_stock -= 1
+	var restored: int = mini(Constants.FIELD_REPAIR_HP, max_hull_hp() - current_hull_hp)
+	current_hull_hp += restored
+	step_count += 1
+	var retaliation: int = _enemy_attacks()
+	var drift_damage: int = _drift_hazards()
+	var sunk: bool = current_hull_hp <= 0
+	if sunk: ship_cargo.clear(); is_active = false
+	var message: String = "Field repairs restore %d hull HP (%d repair plank(s) left)." % [restored, repair_stock]
+	if retaliation + drift_damage > 0: message += " Hazards/enemies deal %d damage during repairs." % (retaliation + drift_damage)
+	if sunk: message += " The ship sank; unbanked cargo was lost."
+	last_action_message = message
+	return {"success": true, "message": message, "sunk": sunk, "hull_damage": retaliation + drift_damage, "hull_restored": restored}
+
+func use_emergency_ration() -> Dictionary:
+	if not is_active: return _action_result(false, "No active voyage.")
+	if ration_stock <= 0: return _action_result(false, "No emergency rations remain.")
+	ration_stock -= 1
+	ration_burst_actions = Constants.RATION_BURST_TURNS
+	step_count += 1
+	var retaliation: int = _enemy_attacks()
+	var drift_damage: int = _drift_hazards()
+	var sunk: bool = current_hull_hp <= 0
+	if sunk: ship_cargo.clear(); is_active = false
+	var message: String = "Emergency ration consumed; next move gains +1 tile range (%d ration(s) left)." % ration_stock
+	if retaliation + drift_damage > 0: message += " Hazards/enemies deal %d damage." % (retaliation + drift_damage)
+	if sunk: message += " The ship sank; unbanked cargo was lost."
+	last_action_message = message
+	return {"success": true, "message": message, "sunk": sunk, "hull_damage": retaliation + drift_damage}
+
+func consume_movement_burst() -> void:
+	if ration_burst_actions > 0: ration_burst_actions -= 1
 
 func _enemy_attacks() -> int:
 	var total: int = 0
@@ -200,6 +260,7 @@ func move_to(destination: Vector2i) -> Dictionary:
 		message += " Salvaged 3 Copper Ore."
 	var drift_damage: int = _drift_hazards()
 	damage += drift_damage
+	consume_movement_burst()
 	if drift_damage > 0:
 		message += " A drifting hazard struck for %d hull damage." % drift_damage
 	var sunk: bool = current_hull_hp <= 0
@@ -331,7 +392,7 @@ func _array_to_vector(value: Variant, fallback: Vector2i) -> Vector2i:
 	return fallback
 
 func to_dict() -> Dictionary:
-	return {"is_active": is_active, "tier": tier, "seed_value": seed_value, "current_hull_hp": current_hull_hp, "ship_id": ship_id, "captain_background": captain_background, "ship_cargo": ship_cargo.duplicate(true), "chart_size": chart_size, "ship_position": _vector_to_array(ship_position), "extraction_position": _vector_to_array(extraction_position), "salvage_position": _vector_to_array(salvage_position), "salvage_collected": salvage_collected, "step_count": step_count, "hazards": hazards.duplicate(true), "exploration_sites": exploration_sites.duplicate(true), "reef_position": _vector_to_array(reef_position), "wind_direction": _vector_to_array(wind_direction), "extraction_gold_reward": extraction_gold_reward, "last_action_message": last_action_message, "enemies": enemies.duplicate(true), "ammunition": ammunition, "equipment_levels": equipment_levels.duplicate(true)}
+	return {"is_active": is_active, "tier": tier, "seed_value": seed_value, "current_hull_hp": current_hull_hp, "ship_id": ship_id, "captain_background": captain_background, "ship_cargo": ship_cargo.duplicate(true), "chart_size": chart_size, "ship_position": _vector_to_array(ship_position), "extraction_position": _vector_to_array(extraction_position), "salvage_position": _vector_to_array(salvage_position), "salvage_collected": salvage_collected, "step_count": step_count, "hazards": hazards.duplicate(true), "exploration_sites": exploration_sites.duplicate(true), "reef_position": _vector_to_array(reef_position), "wind_direction": _vector_to_array(wind_direction), "extraction_gold_reward": extraction_gold_reward, "last_action_message": last_action_message, "enemies": enemies.duplicate(true), "ammunition": ammunition, "equipment_levels": equipment_levels.duplicate(true), "relics": relics.duplicate(), "repair_stock": repair_stock, "ration_stock": ration_stock, "ration_burst_actions": ration_burst_actions, "bosses_defeated": bosses_defeated}
 
 func from_dict(data: Dictionary) -> void:
 	is_active = bool(data.get("is_active", false))
@@ -380,3 +441,12 @@ func from_dict(data: Dictionary) -> void:
 		for enemy in saved_enemies:
 			if enemy is Dictionary and enemy.has("position"):
 				enemies.append(enemy.duplicate(true))
+	relics.clear()
+	var saved_relics: Variant = data.get("relics", [])
+	if saved_relics is Array:
+		for relic in saved_relics:
+			if not relics.has(str(relic)): relics.append(str(relic))
+	repair_stock = maxi(0, int(data.get("repair_stock", 0)))
+	ration_stock = maxi(0, int(data.get("ration_stock", 0)))
+	ration_burst_actions = clampi(int(data.get("ration_burst_actions", 0)), 0, 1)
+	bosses_defeated = maxi(0, int(data.get("bosses_defeated", 0)))

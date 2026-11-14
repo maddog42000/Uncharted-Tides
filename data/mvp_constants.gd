@@ -24,6 +24,8 @@ const ITEMS: Dictionary = {
 	"cannonball": {"name": "Cannonball", "category": "provision"},
 	"raw_sea_bass": {"name": "Raw Sea Bass", "category": "provision"},
 	"gold_coin": {"name": "Gold Coin", "category": "currency"},
+	"sea_serpent_scale": {"name": "Sea Serpent Scale", "category": "relic"},
+	"dreadnought_insignia": {"name": "Dreadnought Insignia", "category": "relic"},
 	"doubloon": {"name": "Doubloon", "category": "currency"}
 }
 
@@ -72,6 +74,13 @@ const ENEMY_COUNTS_BY_TIER: Dictionary = {1: 1, 2: 2, 3: 3, 4: 4}
 const ENEMY_HULL_BY_TIER: Dictionary = {1: 60, 2: 100, 3: 160, 4: 240}
 const ENEMY_DAMAGE_BY_TIER: Dictionary = {1: 12, 2: 18, 3: 25, 4: 32}
 const ENEMY_LOOT_BY_TIER: Dictionary = {1: 150, 2: 300, 3: 600, 4: 1000}
+const BOSS_HULL_BY_TIER: Dictionary = {3: 420, 4: 650}
+const BOSS_DAMAGE_BY_TIER: Dictionary = {3: 28, 4: 38}
+const BOSS_LOOT_BY_TIER: Dictionary = {3: 2500, 4: 5000}
+const FIELD_REPAIR_HP: int = 40
+const RATION_BURST_TURNS: int = 1
+const TIER_PROVISION_COSTS: Dictionary = {1: 224, 2: 440, 3: 664, 4: 1096}
+const TIER_BASE_GUARANTEE: Dictionary = {1: 280, 2: 550, 3: 830, 4: 1370}
 const COMBAT_RANGE: int = 3
 const CANNON_BASE_DAMAGE: int = 25
 const EQUIPMENT_MAX_LEVEL: int = 3

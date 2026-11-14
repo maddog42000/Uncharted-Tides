@@ -13,6 +13,9 @@ var _site_label: Label
 var _status_label: Label
 var _explore_button: Button
 var _combat_button: Button
+var _repair_button: Button
+var _ration_button: Button
+var _supply_label: Label
 var _combat_mode: bool = false
 var _message: String = ""
 var _transitioning: bool = false
@@ -71,10 +74,14 @@ func _build_screen() -> void:
 	_grid.add_theme_constant_override("v_separation", 3)
 	chart_box.add_child(_grid)
 	chart_box.add_child(_label("S Ship  ! Reef  M Mine  O Obstacle  C Salvage  I Island  W Wreck  X Extraction", 14))
+	var details_scroll := ScrollContainer.new()
+	details_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	details_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.add_child(details_scroll)
 	var details := VBoxContainer.new()
 	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	details.add_theme_constant_override("separation", 11)
-	content.add_child(details)
+	details.add_theme_constant_override("separation", 8)
+	details_scroll.add_child(details)
 	_movement_label = _label("Movement range: —", 19)
 	details.add_child(_movement_label)
 	_hull_label = _label("Hull: —", 19)
@@ -99,7 +106,17 @@ func _build_screen() -> void:
 	_combat_button.custom_minimum_size = Vector2(0, 58)
 	_combat_button.pressed.connect(_on_combat_mode_pressed)
 	details.add_child(_combat_button)
-	var rules := _label("Hazards shift toward you every few action ticks; higher voyage tiers add more hazards and increase drift frequency. Anchor on islands for 2 ticks or shipwrecks for 3 ticks to claim their guaranteed cargo. Extract at X to bank cargo and receive a Gold payout covering provisions plus a 25% margin.", 16)
+	_supply_label = _label("Field stores: —", 15)
+	details.add_child(_supply_label)
+	_repair_button = Button.new()
+	_repair_button.custom_minimum_size = Vector2(0, 48)
+	_repair_button.pressed.connect(_on_field_repair_pressed)
+	details.add_child(_repair_button)
+	_ration_button = Button.new()
+	_ration_button.custom_minimum_size = Vector2(0, 48)
+	_ration_button.pressed.connect(_on_ration_pressed)
+	details.add_child(_ration_button)
+	var rules := _label("Tier 3 Sea Monster and Tier 4 Dreadnought Captain bosses drop unique relics. Repair planks restore up to 40 hull; each ration gives +1 range for your next move. Supply actions cost a turn. Safe extraction covers all launch provisions plus 25%.", 15)
 	rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	details.add_child(rules)
 	_status_label = _label("", 16)
@@ -144,6 +161,11 @@ func _render_state() -> void:
 		_explore_button.disabled = bool(site.get("completed", false)) or GameClock.is_clock_paused()
 	_combat_button.text = "Target enemy: ON · tap highlighted enemy" if _combat_mode else "Target enemy: OFF · cannon range %d" % Constants.COMBAT_RANGE
 	_combat_button.disabled = voyage.ammunition <= 0 or GameClock.is_clock_paused()
+	_supply_label.text = "Field stores: %d repair plank(s) · %d emergency ration(s)" % [voyage.repair_stock, voyage.ration_stock]
+	_repair_button.text = "Field repair (+%d hull)" % Constants.FIELD_REPAIR_HP
+	_repair_button.disabled = voyage.repair_stock <= 0 or voyage.current_hull_hp >= max_hp or GameClock.is_clock_paused()
+	_ration_button.text = "Emergency ration (+1 tile next move)"
+	_ration_button.disabled = voyage.ration_stock <= 0 or voyage.ration_burst_actions > 0 or GameClock.is_clock_paused()
 	_status_label.text = _message
 	_render_chart()
 	SettingsManager.apply_to_tree(self)
@@ -167,7 +189,7 @@ func _render_chart() -> void:
 			var is_current: bool = tile == voyage.ship_position
 			button.text = _tile_marker(tile, is_current)
 			if not enemy.is_empty():
-				button.text = "P" if str(enemy.get("type", "")).contains("sloop") else "G"
+				button.text = "B" if bool(enemy.get("boss", false)) else ("P" if str(enemy.get("type", "")).contains("sloop") else "G")
 			button.tooltip_text = "Tile (%d, %d)%s" % [x, y, " · movement available" if in_range else ""]
 			button.disabled = (not targetable if _combat_mode else not in_range) or GameClock.is_clock_paused()
 			if is_current:
@@ -194,7 +216,7 @@ func _tile_marker(tile: Vector2i, is_current: bool) -> String:
 	if is_current:
 		return "S"
 	var enemy: Dictionary = voyage.enemy_at(tile)
-	if not enemy.is_empty(): return "P" if str(enemy.get("type", "")).contains("sloop") else "G"
+	if not enemy.is_empty(): return "B" if bool(enemy.get("boss", false)) else ("P" if str(enemy.get("type", "")).contains("sloop") else "G")
 	if tile == voyage.extraction_position:
 		return "X"
 	if tile == voyage.salvage_position and not voyage.salvage_collected:
@@ -234,6 +256,22 @@ func _on_tile_pressed(destination: Vector2i) -> void:
 func _on_combat_mode_pressed() -> void:
 	_combat_mode = not _combat_mode
 	_message = "Tap a highlighted enemy vessel to fire one cannonball; surviving enemies retaliate." if _combat_mode else "Targeting cancelled."
+	_render_state()
+
+func _on_field_repair_pressed() -> void:
+	var result: Dictionary = PlayerData.use_field_repair()
+	_message = str(result.get("message", ""))
+	if bool(result.get("sunk", false)):
+		_return_to_port(_message)
+		return
+	_render_state()
+
+func _on_ration_pressed() -> void:
+	var result: Dictionary = PlayerData.use_emergency_ration()
+	_message = str(result.get("message", ""))
+	if bool(result.get("sunk", false)):
+		_return_to_port(_message)
+		return
 	_render_state()
 
 func _on_explore_pressed() -> void:

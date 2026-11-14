@@ -61,6 +61,30 @@ func _run() -> void:
 	for item_id in Constants.VOYAGE_PROVISIONS[1]:
 		provision_cost += int(Constants.VOYAGE_PROVISIONS[1][item_id]) * int(Constants.MARKET_ITEMS[item_id].price_gold)
 	_check(payout.extraction_gold_reward > provision_cost and payout.extraction_guarantee_covers_cost(), "Successful extraction guarantee exceeds provision buy-cost baseline")
+	for tier in range(1, 5):
+		var tier_voyage = VoyageStateScript.new()
+		tier_voyage.start_new_voyage(tier, 600 + tier)
+		var tier_cost: int = 0
+		for item_id in Constants.VOYAGE_PROVISIONS[tier]:
+			tier_cost += int(Constants.VOYAGE_PROVISIONS[tier][item_id]) * int(Constants.MARKET_ITEMS[item_id].price_gold)
+		_check(tier_voyage.extraction_gold_reward > tier_cost and tier_voyage.extraction_guarantee_covers_cost(), "Tier %d safe-extraction guarantee covers provision cost plus profit" % tier)
+		if tier >= 3:
+			var boss: Dictionary = {}
+			for enemy in tier_voyage.enemies:
+				if bool(enemy.get("boss", false)): boss = enemy
+			_check(not boss.is_empty() and int(boss.max_hull) == int(Constants.BOSS_HULL_BY_TIER[tier]) and int(boss.damage) == int(Constants.BOSS_DAMAGE_BY_TIER[tier]), "Tier %d boss hull and damage use the tuned configuration" % tier)
+			if tier == 3:
+				tier_voyage.hazards.clear()
+				tier_voyage.ammunition = 10
+				for enemy in tier_voyage.enemies:
+					if not bool(enemy.get("boss", false)): enemy["alive"] = false
+				boss["position"] = [1, 0]
+				boss["hull"] = 1
+				var boss_shot: Dictionary = tier_voyage.fire_at(Vector2i(1, 0))
+				var relic_dropped: bool = false
+				for cargo_item in tier_voyage.ship_cargo:
+					if str(cargo_item.get("item_id", "")) == "sea_serpent_scale": relic_dropped = true
+				_check(boss_shot.success and relic_dropped, "Defeating the Tier 3 boss drops its unique Captain Relic")
 	var navigator = VoyageStateScript.new()
 	navigator.start_new_voyage(1, 78, "wooden_sloop", "navigator")
 	_check(navigator.movement_range() == 2, "Navigator gains one movement tile per action")
@@ -70,6 +94,18 @@ func _run() -> void:
 	shipwright.hazards.append({"id": "test_reef", "type": "reef", "position": [1, 0], "damage": 25})
 	var mitigated: Dictionary = shipwright.move_to(Vector2i(1, 0))
 	_check(mitigated.success and int(mitigated.hull_damage) == 20 and shipwright.current_hull_hp == 80, "Shipwright reduces collision hull damage by twenty percent")
+	var field = VoyageStateScript.new()
+	field.start_new_voyage(1, 912, "wooden_sloop", "merchant", {}, 10, [], 2, 2)
+	field.hazards.clear()
+	field.enemies.clear()
+	field.current_hull_hp = field.max_hull_hp() - 55
+	var repair: Dictionary = field.use_field_repair()
+	_check(repair.success and int(repair.hull_restored) == Constants.FIELD_REPAIR_HP and field.repair_stock == 1 and field.current_hull_hp == field.max_hull_hp() - 15, "Field repair consumes one carried plank for capped hull recovery")
+	var ration: Dictionary = field.use_emergency_ration()
+	_check(ration.success and field.ration_stock == 1 and field.movement_range() == 2, "Emergency ration grants a temporary +1-tile movement burst")
+	var field_copy = VoyageStateScript.new()
+	field_copy.from_dict(field.to_dict())
+	_check(field_copy.repair_stock == 1 and field_copy.ration_stock == 1 and field_copy.ration_burst_actions == 1, "Field supplies and unused ration burst survive voyage serialization")
 	var combat = VoyageStateScript.new()
 	combat.start_new_voyage(2, 808, "oak_brigantine", "merchant", {"cannons": 1, "sails": 0, "hull": 1}, 4)
 	_check(combat.chart_size == 12 and combat.enemies.size() == 2, "Tier 2 uses a larger chart and scaled enemy fleet")
@@ -94,12 +130,18 @@ func _run() -> void:
 	player.voyage.ship_cargo.clear()
 	player.voyage.ship_cargo.append({"item_id": "copper_ore", "qty": 2})
 	player.voyage.ship_cargo.append({"item_id": "mahogany_plank", "qty": 1})
+	player.voyage.ship_cargo.append({"item_id": "sea_serpent_scale", "qty": 1})
 	var settlement: Dictionary = player._settle_voyage_result({"success": true, "sunk": false, "extracted": true, "message": "Extracted."})
 	_check(settlement.success and settlement.gold_reward == int(ceil(float(payout.extraction_gold_reward) * 1.10)), "Merchant extraction bonus is applied once to the guaranteed payout")
-	_check(player.bank.get("copper_ore", 0) == 2 and player.bank.get("mahogany_plank", 0) == 1 and player.career_stats.extractions == 1 and player.career_stats.gold_earned == settlement.gold_reward and player.career_stats.cargo_salvaged == 3, "Extraction banks cargo and increments journal totals once per voyage")
+	_check(player.bank.get("copper_ore", 0) == 2 and player.bank.get("mahogany_plank", 0) == 1 and player.bank.get("sea_serpent_scale", 0) == 1 and player.captain_relics.has("sea_serpent_scale") and player.career_stats.extractions == 1 and player.career_stats.gold_earned == settlement.gold_reward and player.career_stats.cargo_salvaged == 4, "Extraction banks cargo/relics, records the relic, and increments journal totals once")
 	var career_snapshot: Dictionary = player.serialize()
 	player.deserialize(career_snapshot)
-	_check(player.captain_background == "merchant" and player.career_stats == career_snapshot.career_stats, "Captain choice and lifetime journal totals survive player serialization")
+	var relic_snapshot: Dictionary = player.serialize()
+	player.deserialize(relic_snapshot)
+	_check(player.captain_background == "merchant" and player.career_stats == relic_snapshot.career_stats and player.captain_relics.has("sea_serpent_scale"), "Captain Relics and career totals survive player serialization")
+	var relic_voyage = VoyageStateScript.new()
+	relic_voyage.start_new_voyage(3, 333, "wooden_sloop", "merchant", {}, 10, ["sea_serpent_scale", "dreadnought_insignia"])
+	_check(relic_voyage.max_hull_hp() == 125 and relic_voyage.cannon_damage() == 30, "Owned Captain Relics grant passive hull and cannon bonuses")
 	player.deserialize({"gold": 100, "bank": {}, "backpack": [], "skill_xp": {}, "voyage": {}})
 	_check(player.captain_background == "merchant" and int(player.career_stats.voyages_started) == 0, "Legacy saves migrate to default Captain and empty journal totals")
 	var settings_manager: Node = root.get_node("SettingsManager")
@@ -114,6 +156,10 @@ func _run() -> void:
 	settings_manager.set_text_size(previous_text_size)
 	settings_manager.set_reduced_motion(previous_motion)
 	player.reset_to_defaults()
+	player.bank = Constants.VOYAGE_PROVISIONS[1].duplicate(true)
+	var launch_result: Dictionary = player.launch_voyage(1, 515)
+	_check(launch_result.success and player.voyage.repair_stock == 2 and player.voyage.ration_stock == 3 and player.voyage.ammunition == 10 and player.bank.is_empty(), "Launch consumes and carries Tier 1 repair, ration, and cannonball provisions")
+	player.reset_to_defaults()
 	player.bank["iron_bar"] = 4
 	player.bank["oak_plank"] = 4
 	var cannon_upgrade: Dictionary = player.upgrade_equipment("cannons")
@@ -127,7 +173,7 @@ func _run() -> void:
 	_check(bool(sale.success) and int(sale.proceeds) == 24 and player.gold == 1024 and int(player.bank.copper_ore) == 1, "Home Port market sale debits bank stock and credits Gold")
 	player.reset_to_defaults()
 	if failures == 0:
-		print("Stage 4 mechanics smoke tests passed.")
+		print("Stage 5 mechanics smoke tests passed.")
 		quit(0)
 	else:
 		push_error("%d mechanics smoke test(s) failed." % failures)

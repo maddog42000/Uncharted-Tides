@@ -1,9 +1,9 @@
-; Uncharted Tides — Stage 3 Core Loop
+; Uncharted Tides — Stage 5
 ; Open this folder in Godot 4.7.2 or compatible Godot 4.x Android editor.
 config_version=5
 
 [application]
-config/name="Uncharted Tides — Stage 3 Core Loop"
+config/name="Uncharted Tides"
 run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 

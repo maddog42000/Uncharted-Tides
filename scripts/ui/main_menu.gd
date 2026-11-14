@@ -1,5 +1,7 @@
 extends Control
 
+const Constants = preload("res://data/mvp_constants.gd")
+
 const MENU_ART_SIZE := Vector2(1375.0, 768.0)
 const MENU_VISIBLE_REGION := Rect2(0.0, 0.0, 1375.0, 640.0) # Excludes the embedded conflicting bottom strip.
 const CAPTAIN_OPTIONS: Dictionary = {
@@ -140,7 +142,7 @@ func _show_character() -> void:
 	_finish_modal(box)
 
 func _show_journal() -> void:
-	var box := _begin_modal("Captain's Journal", "Career record · totals persist with your voyage save.", Vector2(600, 410))
+	var box := _begin_modal("Captain's Journal", "Career record · totals persist with your voyage save.", Vector2(600, 500))
 	var stats: Dictionary = PlayerData.career_stats
 	for entry in [
 		["Voyages started", "voyages_started"],
@@ -158,6 +160,12 @@ func _show_journal() -> void:
 		line.add_child(value)
 		row.add_child(line)
 		box.add_child(row)
+	var relic_names: Array[String] = []
+	for relic_id in PlayerData.captain_relics:
+		relic_names.append(str(Constants.ITEMS.get(relic_id, {}).get("name", relic_id)))
+	var relic_text: String = "Captain Relics: " + (", ".join(PackedStringArray(relic_names)) if not relic_names.is_empty() else "None recovered yet")
+	box.add_child(_modal_label(relic_text, 18))
+	box.add_child(_modal_label("Sea Serpent Scale: +25 maximum hull. Dreadnought Insignia: +5 cannon damage and +10% extraction Gold.", 14))
 	_finish_modal(box)
 
 func _show_message(title_text: String, body_text: String) -> void:

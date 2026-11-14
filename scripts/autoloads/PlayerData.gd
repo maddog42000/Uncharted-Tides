@@ -18,6 +18,7 @@ var active_ship_id: String = "wooden_sloop"
 var captain_background: String = "merchant"
 var career_stats: Dictionary = {"voyages_started": 0, "extractions": 0, "gold_earned": 0, "cargo_salvaged": 0}
 var equipment_levels: Dictionary = {"cannons": 0, "sails": 0, "hull": 0}
+var captain_relics: Array[String] = []
 var voyage: VoyageState = VoyageStateScript.new()
 
 func _ready() -> void:
@@ -44,6 +45,7 @@ func reset_to_defaults() -> void:
 	captain_background = "merchant"
 	career_stats = {"voyages_started": 0, "extractions": 0, "gold_earned": 0, "cargo_salvaged": 0}
 	equipment_levels = {"cannons": 0, "sails": 0, "hull": 0}
+	captain_relics.clear()
 	voyage = VoyageStateScript.new()
 	inventory_updated.emit()
 	state_changed.emit()
@@ -231,6 +233,18 @@ func upgrade_equipment(slot: String) -> Dictionary:
 	state_changed.emit()
 	return {"success": true, "message": "%s upgraded to Level %d." % [str(recipe.name), next_level + 1]}
 
+func use_field_repair() -> Dictionary:
+	if GameClock.is_clock_paused(): return {"success": false, "message": "Voyage paused while the app is suspended."}
+	if not voyage.is_active: return {"success": false, "message": "No active voyage."}
+	var result: Dictionary = voyage.use_field_repair()
+	return _settle_voyage_result(result) if bool(result.get("success", false)) else result
+
+func use_emergency_ration() -> Dictionary:
+	if GameClock.is_clock_paused(): return {"success": false, "message": "Voyage paused while the app is suspended."}
+	if not voyage.is_active: return {"success": false, "message": "No active voyage."}
+	var result: Dictionary = voyage.use_emergency_ration()
+	return _settle_voyage_result(result) if bool(result.get("success", false)) else result
+
 func fire_cannons_at(position: Vector2i) -> Dictionary:
 	if GameClock.is_clock_paused():
 		return {"success": false, "message": "Voyage paused while the app is suspended."}
@@ -267,7 +281,7 @@ func launch_voyage(tier: int, seed_value: int) -> Dictionary:
 		bank[item_id] = int(bank[item_id]) - int(provisions[item_id])
 		if int(bank[item_id]) <= 0:
 			bank.erase(item_id)
-	voyage.start_new_voyage(tier, seed_value, active_ship_id, captain_background, equipment_levels, int(provisions.get("cannonball", 0)))
+	voyage.start_new_voyage(tier, seed_value, active_ship_id, captain_background, equipment_levels, int(provisions.get("cannonball", 0)), captain_relics, int(provisions.get("repair_plank", 0)), int(provisions.get("raw_sea_bass", 0)))
 	career_stats["voyages_started"] = int(career_stats.get("voyages_started", 0)) + 1
 	inventory_updated.emit()
 	state_changed.emit()
@@ -321,10 +335,16 @@ func _settle_voyage_result(result: Dictionary) -> Dictionary:
 			if item_id == "gold_coin":
 				gold += quantity
 				career_stats["gold_earned"] = int(career_stats.get("gold_earned", 0)) + quantity
+			elif item_id in ["sea_serpent_scale", "dreadnought_insignia"]:
+				if not captain_relics.has(item_id): captain_relics.append(item_id)
+				bank[item_id] = int(bank.get(item_id, 0)) + quantity
+				banked += quantity
 			elif not item_id.is_empty():
 				bank[item_id] = int(bank.get(item_id, 0)) + quantity
 				banked += quantity
 		var guarantee: int = voyage.extraction_gold_reward
+		if captain_relics.has("dreadnought_insignia"):
+			guarantee = int(ceil(float(guarantee) * 1.10))
 		if captain_background == "merchant":
 			guarantee = int(ceil(float(guarantee) * 1.10))
 		gold += guarantee
@@ -381,6 +401,7 @@ func serialize() -> Dictionary:
 		"captain_background": captain_background,
 		"career_stats": career_stats.duplicate(true),
 		"equipment_levels": equipment_levels.duplicate(true),
+		"captain_relics": captain_relics.duplicate(),
 		"skill_xp": skill_xp.duplicate(true),
 		"backpack": backpack.duplicate(true),
 		"bank": bank.duplicate(true),
@@ -405,6 +426,12 @@ func deserialize(data: Dictionary) -> void:
 	if saved_equipment is Dictionary:
 		for slot in equipment_levels:
 			equipment_levels[slot] = clampi(int(saved_equipment.get(slot, 0)), 0, Constants.EQUIPMENT_MAX_LEVEL)
+	captain_relics.clear()
+	var saved_relics: Variant = data.get("captain_relics", [])
+	if saved_relics is Array:
+		for relic in saved_relics:
+			if str(relic) in ["sea_serpent_scale", "dreadnought_insignia"] and not captain_relics.has(str(relic)):
+				captain_relics.append(str(relic))
 	var loaded_xp: Variant = data.get("skill_xp", {})
 	for skill in Constants.SKILLS:
 		skill_xp[skill] = maxi(0, int(loaded_xp.get(skill, 0))) if loaded_xp is Dictionary else 0
