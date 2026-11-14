@@ -188,6 +188,24 @@ func _show_journal() -> void:
 		line.add_child(value)
 		row.add_child(line)
 		box.add_child(row)
+	box.add_child(_modal_label("Sailing Mastery: Level %d / 99" % PlayerData.get_level("Sailing"), 18))
+	for milestone in Constants.SAILING_MASTERY_MILESTONES:
+		var milestone_level: int = int(milestone.get("level", 0))
+		var claimed: bool = PlayerData.sailing_milestones_claimed.has(milestone_level)
+		var claim := Button.new()
+		claim.text = "Sailing %d · %d Gold · %s" % [milestone_level, int(milestone.get("reward", 0)), "Claimed" if claimed else "Claim"]
+		claim.custom_minimum_size.y = 54
+		claim.disabled = claimed or PlayerData.get_level("Sailing") < milestone_level or PlayerData.voyage.is_active
+		claim.pressed.connect(func(): PlayerData.claim_sailing_milestone(milestone_level); _show_journal())
+		box.add_child(claim)
+	var cost: Dictionary = PlayerData.prestige_cost()
+	box.add_child(_modal_label("Fleet Prestige %d · permanent +%d%% extraction Gold" % [PlayerData.fleet_prestige, PlayerData.fleet_prestige * 2], 16))
+	var prestige := Button.new()
+	prestige.text = "Prestige · %d Gold + %d Doubloons" % [int(cost.gold), int(cost.doubloons)]
+	prestige.custom_minimum_size.y = 58
+	prestige.disabled = PlayerData.voyage.is_active or PlayerData.get_level("Sailing") < 99 or PlayerData.gold < int(cost.gold) or PlayerData.doubloons < int(cost.doubloons)
+	prestige.pressed.connect(func(): PlayerData.perform_fleet_prestige(); _show_journal())
+	box.add_child(prestige)
 	var relic_names: Array[String] = []
 	for relic_id in PlayerData.captain_relics:
 		relic_names.append(str(Constants.ITEMS.get(relic_id, {}).get("name", relic_id)))

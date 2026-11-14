@@ -97,6 +97,18 @@ const EQUIPMENT: Dictionary = {
 }
 const SITE_WORK_TICKS: Dictionary = {"island": 2, "shipwreck": 3}
 
+const CREW_SPECIALISTS: Dictionary = {
+	"master_gunner": {"name":"Master Gunner", "gold":2500, "doubloons":2, "bonus":"+6 cannon damage"},
+	"quartermaster": {"name":"Quartermaster", "gold":2200, "doubloons":2, "bonus":"+1 Copper Ore salvage"},
+	"bosun": {"name":"Bosun", "gold":2000, "doubloons":1, "bonus":"+15 hull repair"}
+}
+const MAX_ACTIVE_CREW: int = 2
+const SAILING_MASTERY_MILESTONES: Array[Dictionary] = [{"level":10,"reward":250},{"level":25,"reward":750},{"level":50,"reward":2000},{"level":75,"reward":5000},{"level":99,"reward":12000}]
+const PRESTIGE_BASE_GOLD: int = 25000
+const PRESTIGE_BASE_DOUBLOONS: int = 10
+const SEA_EVENT_COUNTS_BY_TIER: Dictionary = {1:2,2:3,3:4,4:5}
+const FOG_STEALTH_ACTIONS_BY_TIER: Dictionary = {1:2,2:3,3:3,4:4}
+
 # Voyage provisions are paid from the permanent bank when a voyage launches.
 # Quantities are intentionally modest, increasing by tier; rebalance through playtesting.
 const VOYAGE_PROVISIONS: Dictionary = {

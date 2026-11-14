@@ -21,6 +21,10 @@ var equipment_levels: Dictionary = {"cannons": 0, "sails": 0, "hull": 0}
 var captain_relics: Array[String] = []
 var bounty_cycle: int = -1
 var bounty_contracts: Array[Dictionary] = []
+var hired_crew: Array[String] = []
+var active_crew: Array[String] = []
+var sailing_milestones_claimed: Array[int] = []
+var fleet_prestige: int = 0
 var voyage: VoyageState = VoyageStateScript.new()
 
 func _ready() -> void:
@@ -50,6 +54,10 @@ func reset_to_defaults() -> void:
 	captain_relics.clear()
 	bounty_cycle = -1
 	bounty_contracts.clear()
+	hired_crew.clear()
+	active_crew.clear()
+	sailing_milestones_claimed.clear()
+	fleet_prestige = 0
 	_ensure_bounty_cycle()
 	voyage = VoyageStateScript.new()
 	inventory_updated.emit()
@@ -107,6 +115,42 @@ func _progress_bounties(kind: String, amount: int = 1, extracted_tier: int = 0) 
 			bank[reward_item] = int(bank.get(reward_item, 0)) + reward_qty
 		completed_titles.append(str(contract.get("title", "Bounty")))
 	return completed_titles
+
+func hire_crew(id: String) -> Dictionary:
+	if voyage.is_active: return {"success":false,"message":"Crew changes are port-only."}
+	var spec: Dictionary = Constants.CREW_SPECIALISTS.get(id,{})
+	if spec.is_empty() or hired_crew.has(id): return {"success":false,"message":"Unknown or already hired specialist."}
+	if gold < int(spec.gold) or doubloons < int(spec.doubloons): return {"success":false,"message":"Insufficient Gold or Doubloons."}
+	gold -= int(spec.gold); doubloons -= int(spec.doubloons); hired_crew.append(id); state_changed.emit()
+	return {"success":true,"message":str(spec.name)+" hired."}
+
+func toggle_crew(id: String) -> Dictionary:
+	if voyage.is_active or not hired_crew.has(id): return {"success":false,"message":"Hire in port before assigning."}
+	if active_crew.has(id): active_crew.erase(id)
+	elif active_crew.size() < Constants.MAX_ACTIVE_CREW: active_crew.append(id)
+	else: return {"success":false,"message":"At most two specialists may sail."}
+	state_changed.emit(); return {"success":true,"message":"Crew assignment updated."}
+
+func claim_sailing_milestone(level: int) -> Dictionary:
+	if voyage.is_active: return {"success":false,"message":"Milestones can only be claimed in port."}
+	for milestone in Constants.SAILING_MASTERY_MILESTONES:
+		if int(milestone.get("level", 0)) != level: continue
+		if get_level("Sailing") < level or sailing_milestones_claimed.has(level): return {"success":false,"message":"Milestone is unavailable or already claimed."}
+		sailing_milestones_claimed.append(level)
+		gold += int(milestone.get("reward", 0))
+		career_stats["gold_earned"] = int(career_stats.get("gold_earned", 0)) + int(milestone.get("reward", 0))
+		state_changed.emit()
+		return {"success":true,"message":"Sailing milestone claimed."}
+	return {"success":false,"message":"Unknown Sailing milestone."}
+
+func prestige_cost() -> Dictionary:
+	return {"gold":Constants.PRESTIGE_BASE_GOLD*(fleet_prestige+1),"doubloons":Constants.PRESTIGE_BASE_DOUBLOONS*(fleet_prestige+1)}
+
+func perform_fleet_prestige() -> Dictionary:
+	var cost: Dictionary = prestige_cost()
+	if voyage.is_active or get_level("Sailing") < 99 or gold < cost.gold or doubloons < cost.doubloons: return {"success":false,"message":"Requires Sailing 99 and the displayed prestige cost."}
+	gold -= cost.gold; doubloons -= cost.doubloons; fleet_prestige += 1; state_changed.emit()
+	return {"success":true,"message":"Fleet Prestige %d earned." % fleet_prestige}
 
 func select_captain_background(background_id: String) -> Dictionary:
 	if voyage.is_active:
@@ -343,7 +387,7 @@ func launch_voyage(tier: int, seed_value: int) -> Dictionary:
 		if int(bank[item_id]) <= 0:
 			bank.erase(item_id)
 	_ensure_bounty_cycle()
-	voyage.start_new_voyage(tier, seed_value, active_ship_id, captain_background, equipment_levels, int(provisions.get("cannonball", 0)), captain_relics, int(provisions.get("repair_plank", 0)), int(provisions.get("raw_sea_bass", 0)))
+	voyage.start_new_voyage(tier, seed_value, active_ship_id, captain_background, equipment_levels, int(provisions.get("cannonball", 0)), captain_relics, int(provisions.get("repair_plank", 0)), int(provisions.get("raw_sea_bass", 0)), active_crew)
 	career_stats["voyages_started"] = int(career_stats.get("voyages_started", 0)) + 1
 	inventory_updated.emit()
 	state_changed.emit()
@@ -374,6 +418,11 @@ func move_open_sea_to(destination: Vector2i) -> Dictionary:
 	if bool(result.get("loot_found", false)): AudioCue.play_cue("salvage")
 	if bool(result.get("extracted", false)): AudioCue.play_cue("extraction")
 	return _settle_voyage_result(result)
+
+func resolve_sea_event(choice: String) -> Dictionary:
+	var r: Dictionary = voyage.resolve_sea_event(choice)
+	if r.success: state_changed.emit()
+	return r
 
 func advance_exploration_tick() -> Dictionary:
 	if GameClock.is_clock_paused():
@@ -421,6 +470,8 @@ func _settle_voyage_result(result: Dictionary) -> Dictionary:
 			guarantee = int(ceil(float(guarantee) * 1.10))
 		if captain_background == "merchant":
 			guarantee = int(ceil(float(guarantee) * 1.10))
+		if fleet_prestige > 0:
+			guarantee = int(ceil(float(guarantee) * (1.0 + 0.02 * fleet_prestige)))
 		gold += guarantee
 		career_stats["gold_earned"] = int(career_stats.get("gold_earned", 0)) + guarantee
 		career_stats["extractions"] = int(career_stats.get("extractions", 0)) + 1
@@ -471,7 +522,7 @@ func extract_cargo_to_bank() -> int:
 
 func serialize() -> Dictionary:
 	return {
-		"version": 4,
+		"version": 5,
 		"tick_count": GameClock.tick_count,
 		"active_ship_id": active_ship_id,
 		"gold": gold,
@@ -482,6 +533,7 @@ func serialize() -> Dictionary:
 		"captain_relics": captain_relics.duplicate(),
 		"bounty_cycle": bounty_cycle,
 		"bounty_contracts": bounty_contracts.duplicate(true),
+		"hired_crew": hired_crew.duplicate(), "active_crew": active_crew.duplicate(), "sailing_milestones_claimed": sailing_milestones_claimed.duplicate(), "fleet_prestige": fleet_prestige,
 		"skill_xp": skill_xp.duplicate(true),
 		"backpack": backpack.duplicate(true),
 		"bank": bank.duplicate(true),
@@ -519,6 +571,21 @@ func deserialize(data: Dictionary) -> void:
 		for relic in saved_relics:
 			if str(relic) in ["sea_serpent_scale", "dreadnought_insignia"] and not captain_relics.has(str(relic)):
 				captain_relics.append(str(relic))
+	hired_crew.clear()
+	var crew_save: Variant = data.get("hired_crew", [])
+	if crew_save is Array:
+		for cid in crew_save:
+			if Constants.CREW_SPECIALISTS.has(str(cid)): hired_crew.append(str(cid))
+	active_crew.clear()
+	var active_save: Variant = data.get("active_crew", [])
+	if active_save is Array:
+		for cid in active_save:
+			if hired_crew.has(str(cid)) and active_crew.size() < 2: active_crew.append(str(cid))
+	fleet_prestige = maxi(0, int(data.get("fleet_prestige", 0)))
+	var milestones: Variant = data.get("sailing_milestones_claimed", [])
+	sailing_milestones_claimed.clear()
+	if milestones is Array:
+		for milestone in milestones: sailing_milestones_claimed.append(int(milestone))
 	var loaded_xp: Variant = data.get("skill_xp", {})
 	for skill in Constants.SKILLS:
 		skill_xp[skill] = maxi(0, int(loaded_xp.get(skill, 0))) if loaded_xp is Dictionary else 0

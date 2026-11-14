@@ -33,8 +33,12 @@ var wind_direction: Vector2i = Vector2i.RIGHT # Display-only environmental condi
 var extraction_gold_reward: int = 0
 var last_action_message: String = ""
 var event_feed: Array[String] = []
+var crew: Array[String] = []
+var sea_events: Array[Dictionary] = []
+var pending_event_index: int = -1
+var fog_actions: int = 0
 
-func start_new_voyage(p_tier: int, p_seed: int, p_ship_id: String = "wooden_sloop", p_background: String = "merchant", p_equipment: Dictionary = {}, p_ammunition: int = 0, p_relics: Array = [], p_repairs: int = 0, p_rations: int = 0) -> void:
+func start_new_voyage(p_tier: int, p_seed: int, p_ship_id: String = "wooden_sloop", p_background: String = "merchant", p_equipment: Dictionary = {}, p_ammunition: int = 0, p_relics: Array = [], p_repairs: int = 0, p_rations: int = 0, p_crew: Array = []) -> void:
 	is_active = true
 	tier = clampi(p_tier, 1, 4)
 	seed_value = p_seed
@@ -62,6 +66,12 @@ func start_new_voyage(p_tier: int, p_seed: int, p_ship_id: String = "wooden_sloo
 	enemies.clear()
 	last_action_message = ""
 	event_feed.clear()
+	crew.clear()
+	for crew_id in p_crew:
+		if not crew.has(str(crew_id)): crew.append(str(crew_id))
+	sea_events.clear()
+	pending_event_index = -1
+	fog_actions = 0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = absi(p_seed)
 	var winds: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
@@ -69,6 +79,8 @@ func start_new_voyage(p_tier: int, p_seed: int, p_ship_id: String = "wooden_sloo
 	_generate_hazards(rng)
 	_generate_sites(rng)
 	_generate_enemies(rng)
+	for i in range(int(Constants.SEA_EVENT_COUNTS_BY_TIER.get(tier, 2))):
+		sea_events.append({"type":["merchant_distress","tailwind_current","fog_squall"][i % 3],"position":_vector_to_array(_random_open_position(rng)),"resolved":false})
 	reef_position = _first_hazard_position("reef")
 	extraction_gold_reward = _calculate_extraction_reward(tier)
 
@@ -125,7 +137,7 @@ func max_hull_hp() -> int:
 	return int(Constants.SHIPS.get(ship_id, {}).get("max_hp", 100)) + 50 * int(equipment_levels.get("hull", 0)) + (25 if relics.has("sea_serpent_scale") else 0)
 
 func cannon_damage() -> int:
-	return int(Constants.CANNON_BASE_DAMAGE) + 15 * int(equipment_levels.get("cannons", 0)) + (5 if relics.has("dreadnought_insignia") else 0)
+	return int(Constants.CANNON_BASE_DAMAGE) + 15 * int(equipment_levels.get("cannons", 0)) + (5 if relics.has("dreadnought_insignia") else 0) + (6 if crew.has("master_gunner") else 0)
 
 func _generate_enemies(rng: RandomNumberGenerator) -> void:
 	var count: int = int(Constants.ENEMY_COUNTS_BY_TIER.get(tier, 1)) + (1 if tier >= 3 else 0)
@@ -188,7 +200,7 @@ func use_field_repair() -> Dictionary:
 	if repair_stock <= 0: return _action_result(false, "No repair planks remain.")
 	if current_hull_hp >= max_hull_hp(): return _action_result(false, "Hull is already at maximum durability.")
 	repair_stock -= 1
-	var restored: int = mini(Constants.FIELD_REPAIR_HP, max_hull_hp() - current_hull_hp)
+	var restored: int = mini(Constants.FIELD_REPAIR_HP + (15 if crew.has("bosun") else 0), max_hull_hp() - current_hull_hp)
 	current_hull_hp += restored
 	step_count += 1
 	var retaliation: int = _enemy_attacks()
@@ -223,6 +235,9 @@ func consume_movement_burst() -> void:
 	if ration_burst_actions > 0: ration_burst_actions -= 1
 
 func _enemy_attacks() -> int:
+	if fog_actions > 0:
+		fog_actions -= 1
+		return 0
 	var total: int = 0
 	for enemy in enemies:
 		if not bool(enemy.get("alive", false)):
@@ -251,17 +266,20 @@ func can_move_to(destination: Vector2i) -> bool:
 func move_to(destination: Vector2i) -> Dictionary:
 	if not is_active:
 		return _action_result(false, "No active voyage.")
+	if pending_event_index >= 0: return _action_result(false, "Resolve the event first.")
 	if not can_move_to(destination):
 		return _action_result(false, "Choose a highlighted tile within your ship's movement range.")
 	ship_position = destination
 	step_count += 1
+	var event_id: int = event_at(destination)
+	if event_id >= 0: pending_event_index = event_id
 	var message: String = "Sailed to (%d, %d)." % [destination.x, destination.y]
 	var damage: int = _resolve_hazard_at_ship()
 	if damage > 0:
 		message += " Hazard strike: hull lost %d HP." % damage
 	if destination == salvage_position and not salvage_collected:
 		salvage_collected = true
-		ship_cargo.append({"item_id": "copper_ore", "qty": 3})
+		ship_cargo.append({"item_id": "copper_ore", "qty": 3 + (1 if crew.has("quartermaster") else 0)})
 		message += " Salvaged 3 Copper Ore."
 	var drift_damage: int = _drift_hazards()
 	damage += drift_damage
@@ -278,7 +296,7 @@ func move_to(destination: Vector2i) -> Dictionary:
 		message += " Extraction ready; guaranteed reward is %d Gold." % extraction_gold_reward
 	_record_event(message)
 	last_action_message = message
-	return {"success": true, "message": message, "position": ship_position, "step_count": step_count, "hull_damage": damage, "sunk": sunk, "extracted": extracted, "loot_found": destination == salvage_position and salvage_collected}
+	return {"success": true, "message": message, "position": ship_position, "step_count": step_count, "hull_damage": damage, "sunk": sunk, "extracted": extracted, "loot_found": destination == salvage_position and salvage_collected, "event_pending": pending_event_index >= 0}
 
 func advance_exploration_tick() -> Dictionary:
 	if not is_active:
@@ -368,6 +386,46 @@ func _site_index_at(position: Vector2i) -> int:
 			return index
 	return -1
 
+func event_at(position: Vector2i) -> int:
+	for index in range(sea_events.size()):
+		var event: Dictionary = sea_events[index]
+		if not bool(event.get("resolved", false)) and _array_to_vector(event.get("position", []), Vector2i(-1, -1)) == position:
+			return index
+	return -1
+func current_sea_event() -> Dictionary:
+	return sea_events[pending_event_index] if pending_event_index >= 0 and pending_event_index < sea_events.size() else {}
+func resolve_sea_event(choice: String) -> Dictionary:
+	var event: Dictionary = current_sea_event()
+	if event.is_empty(): return _action_result(false, "No event is awaiting a choice.")
+	var kind: String = str(event.get("type", ""))
+	var message: String = ""
+	match kind:
+		"merchant_distress":
+			if choice == "rescue":
+				ship_cargo.append({"item_id":"gold_coin", "qty":150 * tier})
+				message = "Rescued the merchant; secured %d Gold in voyage cargo." % (150 * tier)
+			elif choice == "salvage":
+				ship_cargo.append({"item_id":"copper_ore", "qty":tier + 1})
+				message = "Salvaged %d Copper Ore from the distress site." % (tier + 1)
+			elif choice == "pass": message = "Passed the merchant distress signal."
+			else: return _action_result(false, "Choose rescue, salvage, or pass.")
+		"tailwind_current":
+			if choice != "ride": return _action_result(false, "Choose to ride the current.")
+			ration_burst_actions = 1
+			message = "Caught a tailwind; your next movement gains +1 tile."
+		"fog_squall":
+			if choice != "shelter": return _action_result(false, "Choose shelter in the fog.")
+			fog_actions = int(Constants.FOG_STEALTH_ACTIONS_BY_TIER.get(tier, 2))
+			message = "Sheltered in the fog; enemies lose aggression for %d actions." % fog_actions
+		_:
+			return _action_result(false, "Unknown sea event.")
+	event["resolved"] = true
+	pending_event_index = -1
+	step_count += 1
+	_record_event(message)
+	last_action_message = message
+	return {"success":true, "message":message}
+
 func current_site() -> Dictionary:
 	var index: int = _site_index_at(ship_position)
 	return exploration_sites[index] if index >= 0 else {}
@@ -407,7 +465,7 @@ func _array_to_vector(value: Variant, fallback: Vector2i) -> Vector2i:
 	return fallback
 
 func to_dict() -> Dictionary:
-	return {"is_active": is_active, "tier": tier, "seed_value": seed_value, "current_hull_hp": current_hull_hp, "ship_id": ship_id, "captain_background": captain_background, "ship_cargo": ship_cargo.duplicate(true), "chart_size": chart_size, "ship_position": _vector_to_array(ship_position), "extraction_position": _vector_to_array(extraction_position), "salvage_position": _vector_to_array(salvage_position), "salvage_collected": salvage_collected, "step_count": step_count, "hazards": hazards.duplicate(true), "exploration_sites": exploration_sites.duplicate(true), "reef_position": _vector_to_array(reef_position), "wind_direction": _vector_to_array(wind_direction), "extraction_gold_reward": extraction_gold_reward, "last_action_message": last_action_message, "event_feed": event_feed.duplicate(), "enemies": enemies.duplicate(true), "ammunition": ammunition, "equipment_levels": equipment_levels.duplicate(true), "relics": relics.duplicate(), "repair_stock": repair_stock, "ration_stock": ration_stock, "ration_burst_actions": ration_burst_actions, "bosses_defeated": bosses_defeated}
+	return {"is_active": is_active, "tier": tier, "seed_value": seed_value, "current_hull_hp": current_hull_hp, "ship_id": ship_id, "captain_background": captain_background, "ship_cargo": ship_cargo.duplicate(true), "chart_size": chart_size, "ship_position": _vector_to_array(ship_position), "extraction_position": _vector_to_array(extraction_position), "salvage_position": _vector_to_array(salvage_position), "salvage_collected": salvage_collected, "step_count": step_count, "hazards": hazards.duplicate(true), "exploration_sites": exploration_sites.duplicate(true), "reef_position": _vector_to_array(reef_position), "wind_direction": _vector_to_array(wind_direction), "extraction_gold_reward": extraction_gold_reward, "last_action_message": last_action_message, "event_feed": event_feed.duplicate(), "enemies": enemies.duplicate(true), "ammunition": ammunition, "equipment_levels": equipment_levels.duplicate(true), "relics": relics.duplicate(), "repair_stock": repair_stock, "ration_stock": ration_stock, "ration_burst_actions": ration_burst_actions, "bosses_defeated": bosses_defeated, "crew": crew.duplicate(), "sea_events": sea_events.duplicate(true), "pending_event_index": pending_event_index, "fog_actions": fog_actions}
 
 func from_dict(data: Dictionary) -> void:
 	is_active = bool(data.get("is_active", false))
@@ -472,3 +530,15 @@ func from_dict(data: Dictionary) -> void:
 	ration_stock = maxi(0, int(data.get("ration_stock", 0)))
 	ration_burst_actions = clampi(int(data.get("ration_burst_actions", 0)), 0, 1)
 	bosses_defeated = maxi(0, int(data.get("bosses_defeated", 0)))
+	crew.clear()
+	var saved_crew: Variant = data.get("crew", [])
+	if saved_crew is Array:
+		for crew_id in saved_crew:
+			if not crew.has(str(crew_id)): crew.append(str(crew_id))
+	sea_events.clear()
+	var saved_events: Variant = data.get("sea_events", [])
+	if saved_events is Array:
+		for sea_event in saved_events:
+			if sea_event is Dictionary: sea_events.append(sea_event.duplicate(true))
+	pending_event_index = clampi(int(data.get("pending_event_index", -1)), -1, sea_events.size() - 1)
+	fog_actions = maxi(0, int(data.get("fog_actions", 0)))

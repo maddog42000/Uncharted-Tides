@@ -211,9 +211,21 @@ func _run() -> void:
 	var sale: Dictionary = player.sell_market_item("copper_ore", 2)
 	_check(bool(sale.success) and int(sale.proceeds) == 24 and player.gold == 1024 and int(player.bank.copper_ore) == 1, "Home Port market sale debits bank stock and credits Gold")
 	player.reset_to_defaults()
+	player.gold = 5000
+	player.doubloons = 10
+	var hire: Dictionary = player.hire_crew("master_gunner")
+	_check(bool(hire.get("success", false)) and player.hired_crew.has("master_gunner"), "Crew can be hired from port")
+	player.toggle_crew("master_gunner")
+	player.voyage.start_new_voyage(1, 818, player.active_ship_id, "merchant", {}, 5, [], 1, 1, player.active_crew)
+	_check(player.voyage.cannon_damage() == Constants.CANNON_BASE_DAMAGE + 6 and player.voyage.crew.has("master_gunner"), "Master Gunner stacks with Captain and is snapshotted into voyage")
+	_check(player.voyage.sea_events.size() == Constants.SEA_EVENT_COUNTS_BY_TIER[1], "Tier 1 sea event count follows scaling configuration")
+	var stage7_save: Dictionary = player.serialize()
+	player.deserialize(stage7_save)
+	_check(player.hired_crew.has("master_gunner") and player.voyage.crew.has("master_gunner"), "Crew hiring and voyage snapshot persist")
+	player.reset_to_defaults()
 	if failures == 0:
-		print("Stage 6 mechanics smoke tests passed.")
+		print("Stage 7 mechanics smoke tests passed.")
 		quit(0)
 	else:
-		push_error("%d Stage 6 mechanics smoke test(s) failed." % failures)
+		push_error("%d mechanics smoke test(s) failed." % failures)
 		quit(1)

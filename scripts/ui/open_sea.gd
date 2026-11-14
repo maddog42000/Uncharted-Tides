@@ -18,6 +18,7 @@ var _explore_button: Button
 var _combat_button: Button
 var _repair_button: Button
 var _ration_button: Button
+var _event_box: VBoxContainer
 var _supply_label: Label
 var _combat_mode: bool = false
 var _message: String = ""
@@ -134,6 +135,9 @@ func _build_screen() -> void:
 	var rules := _label("Tier 3 Sea Monster and Tier 4 Dreadnought Captain bosses drop unique relics. Repair planks restore up to 40 hull; each ration gives +1 range for your next move. Supply actions cost a turn. Safe extraction covers all launch provisions plus 25%.", 15)
 	rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	details.add_child(rules)
+	_event_box = VBoxContainer.new()
+	_event_box.name = "SeaEventChoices"
+	details.add_child(_event_box)
 	_status_label = _label("", 16)
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	details.add_child(_status_label)
@@ -192,8 +196,22 @@ func _render_state() -> void:
 	_ration_button.text = "Emergency ration (+1 tile next move)"
 	_ration_button.disabled = voyage.ration_stock <= 0 or voyage.ration_burst_actions > 0 or GameClock.is_clock_paused()
 	_status_label.text = _message
+	_render_event_choices()
 	_render_chart()
 	SettingsManager.apply_to_tree(self)
+
+func _render_event_choices() -> void:
+	for child in _event_box.get_children(): child.queue_free()
+	var event: Dictionary = PlayerData.voyage.current_sea_event()
+	if event.is_empty(): return
+	var kind: String = str(event.type)
+	var options: Array[String] = ["rescue", "salvage", "pass"] if kind == "merchant_distress" else (["ride"] if kind == "tailwind_current" else ["shelter"])
+	for option in options:
+		var button := Button.new()
+		button.text = option.capitalize()
+		button.custom_minimum_size.y = 58
+		button.pressed.connect(func(): _message = str(PlayerData.resolve_sea_event(option).get("message", "")); _render_state())
+		_event_box.add_child(button)
 
 func _render_chart() -> void:
 	for child in _grid.get_children():
@@ -213,16 +231,19 @@ func _render_chart() -> void:
 			var targetable: bool = voyage.can_fire_at(tile)
 			var is_current: bool = tile == voyage.ship_position
 			button.text = _tile_marker(tile, is_current)
+			if voyage.event_at(tile) >= 0: button.text = "E"
 			if not enemy.is_empty():
 				button.text = "B" if bool(enemy.get("boss", false)) else ("P" if str(enemy.get("type", "")).contains("sloop") else "G")
 			button.tooltip_text = "Tile (%d, %d)%s" % [x, y, " · movement available" if in_range else ""]
-			button.disabled = (not targetable if _combat_mode else not in_range) or GameClock.is_clock_paused()
+			button.disabled = (not targetable if _combat_mode else (not in_range or voyage.pending_event_index >= 0)) or GameClock.is_clock_paused()
 			if is_current:
 				button.modulate = Color("#f3d48b")
 			elif not enemy.is_empty():
 				button.modulate = Color("#ff6961") if targetable else Color("#8f6262")
 			elif _combat_mode and targetable:
 				button.modulate = Color("#ffb347")
+			elif voyage.event_at(tile) >= 0:
+				button.modulate = Color("#55d6be")
 			elif tile == voyage.extraction_position:
 				button.modulate = Color("#96d6ad")
 			elif not voyage.hazard_at(tile).is_empty():

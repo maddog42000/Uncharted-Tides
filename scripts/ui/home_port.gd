@@ -7,7 +7,7 @@ const SHIP_ICONS: Dictionary = {
 	"mahogany_galleon": "galleon_icon",
 	"dragonwood_man_owar": "manowar_icon"
 }
-const TAB_ICONS: Dictionary = {"Bank": "icon_bank", "Shipyard": "icon_shipyard", "Market": "icon_market", "Chart Table": "icon_chart", "Bounty Board": "icon_chart"}
+const TAB_ICONS: Dictionary = {"Bank": "icon_bank", "Shipyard": "icon_shipyard", "Market": "icon_market", "Chart Table": "icon_chart", "Bounty Board": "icon_chart", "Crew Roster": "icon_shipyard"}
 
 var _selected_tab: String = "Bank"
 var _selected_tier: int = 1
@@ -101,7 +101,7 @@ func _build_layout() -> void:
 
 	var nav := HBoxContainer.new()
 	nav.add_theme_constant_override("separation", 10)
-	for tab in ["Bank", "Shipyard", "Market", "Chart Table", "Bounty Board"]:
+	for tab in ["Bank", "Shipyard", "Market", "Chart Table", "Bounty Board", "Crew Roster"]:
 		var button := _make_button(tab, 0)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.custom_minimum_size.y = 62
@@ -181,6 +181,7 @@ func _render_tab() -> void:
 		"Market": _render_market()
 		"Chart Table": _render_chart_table()
 		"Bounty Board": _render_bounty_board()
+		"Crew Roster": _render_crew_roster()
 	_refresh_resource_line()
 	SettingsManager.apply_to_tree(self)
 
@@ -424,6 +425,21 @@ func _render_bounty_board() -> void:
 		row.add_child(reward_label)
 		_content.add_child(card)
 	_content.add_child(_body("Defeating ships, completing site scavenging, and matching-tier safe extraction are tracked automatically. Progress and completed rewards persist through saves."))
+
+func _render_crew_roster() -> void:
+	_add_heading("Crew Roster", "Hire and assign up to two specialists. Effects stack with Captain perks and Relics.")
+	for id in Constants.CREW_SPECIALISTS:
+		var spec: Dictionary = Constants.CREW_SPECIALISTS[id]
+		var row := HBoxContainer.new()
+		var label := _body("%s · %s" % [str(spec.name), str(spec.bonus)], true)
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(label)
+		var button := _make_button("Assigned" if PlayerData.active_crew.has(id) else ("Assign" if PlayerData.hired_crew.has(id) else "Hire"), 140)
+		button.custom_minimum_size.y = 60
+		var cid: String = str(id)
+		button.pressed.connect(func(): _handle_transaction(PlayerData.toggle_crew(cid) if PlayerData.hired_crew.has(cid) else PlayerData.hire_crew(cid)))
+		row.add_child(button)
+		_content.add_child(row)
 
 func _active_ship_tier() -> int:
 	var tier: int = 1

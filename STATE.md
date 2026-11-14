@@ -2,12 +2,12 @@
 
 ## Current milestone
 
-Stage 6 branch: `feature/stage6-bounties-and-polish`, based on the user-tested Stage 5 baseline. Adds persistent Harbor Bounties, runtime-generated sound effects, saved Master/SFX volume controls, and a tactical Open Sea HUD/event feed. Android APK builds are manual-only (`workflow_dispatch`) during active development. Android device verification of this branch remains pending.
+Stage 7 branch: `feature/stage7-crew-events-and-release`, based on user-tested Stage 6 commit fd43437 merged to main. Adds hireable crew, maritime chart events, Sailing mastery, Fleet Prestige, and landscape touch polish. Android APK builds are manual-only (`workflow_dispatch`) during active development. Android device verification of this branch remains pending.
 
 ## Scenes
 
 - `scenes/main_menu.tscn` — Main Menu, persisted Settings, Captain selection, and Journal with collected Captain Relics and their passive effects.
-- `scenes/home_port.tscn` — Bank, Shipyard, Market, Chart Table, persistent Bounty Board, equipment crafting, and voyage selection.
+- `scenes/home_port.tscn` — Bank, Shipyard, Market, Chart Table, persistent Bounty Board, Crew Roster, equipment crafting, and voyage selection.
 - `scenes/open_sea.tscn` — adaptive grid, movement/exploration, enemy targeting, field repairs, emergency rations, boss encounters, tactical status badges, recent event feed, and extraction.
 - `scenes/main_debug.tscn` — legacy development harness.
 
@@ -34,6 +34,9 @@ Stage 6 branch: `feature/stage6-bounties-and-polish`, based on the user-tested S
 - `export_presets.cfg` defines the Android debug-test preset with package ID `com.maddog.unchartedtides` and arm64-v8a ABI.
 - `scripts/tests/stage2_*_smoke.gd` are the contract, mechanics, and UI headless smoke suites (names retained from earlier stages).
 
+- Stage 7 adds three hireable specialists with up to two active crew, chart events (distress, tailwind, fog), saved event/crew state, Sailing milestone configuration, and repeatable prestige costs/bonuses. Android workflow remains manual-only.
+
+
 ## Completed milestones
 
 - Stage 1: foundational data contracts and save/economy systems.
@@ -45,4 +48,4 @@ Stage 6 branch: `feature/stage6-bounties-and-polish`, based on the user-tested S
 
 ## Final validation
 
-Run the Godot 4.7.2 project parse and the contract, mechanics, and UI smoke suites once as a single final verification batch after Stage 6 changes are complete. Passing headless checks does not replace on-device layout, touch, install, or lifecycle testing.
+Run the Godot 4.7.2 project parse and the contract, mechanics, and UI smoke suites once as a single final verification batch after Stage 7 changes are complete. Passing headless checks does not replace on-device layout, touch, install, or lifecycle testing.

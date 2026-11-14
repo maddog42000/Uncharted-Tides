@@ -121,7 +121,7 @@ func _run() -> void:
 		quit(1)
 		return
 	_check(str(home.get("_selected_tab")) == "Chart Table", "Start Voyage opens Chart Table tab")
-	for tab_text in ["Bank", "Shipyard", "Market", "Chart Table", "Bounty Board"]:
+	for tab_text in ["Bank", "Shipyard", "Market", "Chart Table", "Bounty Board", "Crew Roster"]:
 		_check(_find_button(home, tab_text) != null, "Home Port tab exists: " + tab_text)
 	var bounty_button := _find_button(home, "Bounty Board")
 	if bounty_button != null:
