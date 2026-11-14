@@ -11,6 +11,9 @@ var _cargo_label: Label
 var _hazard_label: Label
 var _site_label: Label
 var _status_label: Label
+var _tactical_badges_label: Label
+var _resource_badges_label: Label
+var _event_feed_label: Label
 var _explore_button: Button
 var _combat_button: Button
 var _repair_button: Button
@@ -84,6 +87,13 @@ func _build_screen() -> void:
 	details_scroll.add_child(details)
 	_movement_label = _label("Movement range: —", 19)
 	details.add_child(_movement_label)
+	_tactical_badges_label = _label("Captain perk: — · Relics: —", 15)
+	_tactical_badges_label.name = "TacticalBadges"
+	_tactical_badges_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	details.add_child(_tactical_badges_label)
+	_resource_badges_label = _label("Actions · Ammo · Repairs · Rations", 15)
+	_resource_badges_label.name = "VoyageResources"
+	details.add_child(_resource_badges_label)
 	_hull_label = _label("Hull: —", 19)
 	details.add_child(_hull_label)
 	_hull_bar = ProgressBar.new()
@@ -95,6 +105,11 @@ func _build_screen() -> void:
 	_hazard_label = _label("Hazards: —", 16)
 	_hazard_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	details.add_child(_hazard_label)
+	_event_feed_label = _label("VOYAGE LOG\nNo recent events.", 14)
+	_event_feed_label.name = "VoyageEventFeed"
+	_event_feed_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_event_feed_label.custom_minimum_size.y = 110
+	details.add_child(_event_feed_label)
 	_site_label = _label("No exploration site under the ship.", 16)
 	_site_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	details.add_child(_site_label)
@@ -137,7 +152,17 @@ func _render_state() -> void:
 	var max_hp: int = voyage.max_hull_hp()
 	_position_label.text = "Position: (%d, %d)   Actions %d" % [voyage.ship_position.x, voyage.ship_position.y, voyage.step_count]
 	var perk_name: String = str(voyage.captain_background).capitalize()
-	_movement_label.text = "Movement %d  ·  Cannons %d damage  ·  Ammo %d  ·  %s / %s" % [voyage.movement_range(), voyage.cannon_damage(), voyage.ammunition, str(ship_specs.get("name", voyage.ship_id)), perk_name]
+	_movement_label.text = "Movement %d  ·  Cannons %d damage  ·  %s" % [voyage.movement_range(), voyage.cannon_damage(), str(ship_specs.get("name", voyage.ship_id))]
+	var perk_text: String = "+10% extraction Gold" if voyage.captain_background == "merchant" else ("+1 base move range" if voyage.captain_background == "navigator" else "20% less hazard damage")
+	var relic_names: Array[String] = []
+	for relic_id in voyage.relics:
+		relic_names.append(str(Constants.ITEMS.get(relic_id, {}).get("name", relic_id)))
+	_tactical_badges_label.text = "Captain perk: %s · %s\nEquipped relics: %s" % [perk_name, perk_text, ", ".join(PackedStringArray(relic_names)) if not relic_names.is_empty() else "None"]
+	_resource_badges_label.text = "Actions %d  ·  Ammo %d  ·  Repairs %d  ·  Rations %d" % [voyage.step_count, voyage.ammunition, voyage.repair_stock, voyage.ration_stock]
+	var recent_events: Array[String] = []
+	for event_index in range(maxi(0, voyage.event_feed.size() - 4), voyage.event_feed.size()):
+		recent_events.append("• " + voyage.event_feed[event_index])
+	_event_feed_label.text = "VOYAGE LOG\n" + ("\n".join(PackedStringArray(recent_events)) if not recent_events.is_empty() else "No recent events.")
 	_hull_label.text = "Hull: %d / %d HP" % [voyage.current_hull_hp, max_hp]
 	_hull_bar.max_value = max_hp
 	_hull_bar.value = voyage.current_hull_hp

@@ -66,8 +66,8 @@ func _run() -> void:
 
 	saves.wipe_save()
 	if _failures == 0:
-		print("Stage 4 contract smoke tests passed.")
+		print("Stage 6 contract smoke tests passed.")
 		quit(0)
 	else:
-		push_error("%d Stage 4 contract smoke test(s) failed." % _failures)
+		push_error("%d Stage 6 contract smoke test(s) failed." % _failures)
 		quit(1)

@@ -13,6 +13,7 @@ PlayerData="*res://scripts/autoloads/PlayerData.gd"
 SaveManager="*res://scripts/autoloads/SaveManager.gd"
 AssetManager="*res://scripts/autoloads/AssetManager.gd"
 SettingsManager="*res://scripts/autoloads/SettingsManager.gd"
+AudioCue="*res://scripts/autoloads/AudioCue.gd"
 
 [display]
 window/size/viewport_width=1280

@@ -1,5 +1,7 @@
 extends SceneTree
 
+const SettingsManagerScript = preload("res://scripts/autoloads/SettingsManager.gd")
+
 var _failures: int = 0
 
 func _initialize() -> void:
@@ -45,6 +47,8 @@ func _run() -> void:
 	var settings_manager: Node = root.get_node("SettingsManager")
 	var old_text_size: int = settings_manager.text_size_index
 	var old_reduced_motion: bool = settings_manager.reduced_motion
+	var old_master_volume: float = settings_manager.master_volume
+	var old_sfx_volume: float = settings_manager.sfx_volume
 	var test_text_size: int = (old_text_size + 1) % 3
 	var settings_button := menu.find_child("SettingsHotspot", true, false) as Button
 	if settings_button != null:
@@ -60,8 +64,23 @@ func _run() -> void:
 		reduced_motion_toggle.button_pressed = not old_reduced_motion
 		reduced_motion_toggle.toggled.emit(not old_reduced_motion)
 	_check(settings_manager.text_size_index == test_text_size and settings_manager.reduced_motion != old_reduced_motion, "Settings controls update saved accessibility preferences")
+	var master_slider := menu.find_child("MastervolumeSlider", true, false) as HSlider
+	var sfx_slider := menu.find_child("SFXvolumeSlider", true, false) as HSlider
+	_check(master_slider != null and sfx_slider != null, "Settings panel provides Master and SFX volume sliders")
+	if master_slider != null:
+		master_slider.value = 0.37
+		master_slider.value_changed.emit(0.37)
+	if sfx_slider != null:
+		sfx_slider.value = 0.61
+		sfx_slider.value_changed.emit(0.61)
+	var volume_reload := SettingsManagerScript.new()
+	volume_reload._load_settings()
+	_check(is_equal_approx(volume_reload.master_volume, 0.37) and is_equal_approx(volume_reload.sfx_volume, 0.61), "Master and SFX sliders persist volume preferences")
+	volume_reload.free()
 	settings_manager.set_text_size(old_text_size)
 	settings_manager.set_reduced_motion(old_reduced_motion)
+	settings_manager.set_master_volume(old_master_volume)
+	settings_manager.set_sfx_volume(old_sfx_volume)
 	var close_modal := _find_button(menu, "Close")
 	if close_modal != null:
 		close_modal.pressed.emit()
@@ -102,8 +121,14 @@ func _run() -> void:
 		quit(1)
 		return
 	_check(str(home.get("_selected_tab")) == "Chart Table", "Start Voyage opens Chart Table tab")
-	for tab_text in ["Bank", "Shipyard", "Market", "Chart Table"]:
+	for tab_text in ["Bank", "Shipyard", "Market", "Chart Table", "Bounty Board"]:
 		_check(_find_button(home, tab_text) != null, "Home Port tab exists: " + tab_text)
+	var bounty_button := _find_button(home, "Bounty Board")
+	if bounty_button != null:
+		bounty_button.pressed.emit()
+	await process_frame
+	var bounty_content := home.find_child("BountyBoardContent", true, false) as Control
+	_check(bounty_content != null and bounty_content.get_child_count() >= 3, "Bounty Board renders three active contracts")
 	var market_button := _find_button(home, "Market")
 	if market_button != null:
 		market_button.pressed.emit()
@@ -131,6 +156,10 @@ func _run() -> void:
 	var sea: Node = current_scene
 	_check(sea != null and sea.scene_file_path == "res://scenes/open_sea.tscn", "Set Sail transitions to Open Sea")
 	_check(player.voyage.is_active and player.voyage.tier == 1, "Set Sail initializes Tier 1 voyage")
+	var tactical_badges := sea.find_child("TacticalBadges", true, false) as Label if sea != null else null
+	var voyage_resources := sea.find_child("VoyageResources", true, false) as Label if sea != null else null
+	_check(tactical_badges != null and tactical_badges.text.contains("Captain perk") and tactical_badges.text.contains("Equipped relics"), "Open Sea HUD displays Captain perk and Relic badges")
+	_check(voyage_resources != null and voyage_resources.text.contains("Actions") and voyage_resources.text.contains("Repairs"), "Open Sea HUD displays action and repair resources")
 	_check(player.bank.get("repair_plank", 0) == 0 and player.bank.get("cannonball", 0) == 0 and player.bank.get("raw_sea_bass", 0) == 0, "Set Sail deducts tier provisions")
 	if sea == null:
 		quit(1)
@@ -150,6 +179,8 @@ func _run() -> void:
 	await process_frame
 	_check(player.voyage.ship_position == Vector2i(1, 0), "One chart input advances exactly one tile")
 	_check(player.voyage.salvage_collected and player.voyage.ship_cargo.size() == 1 and player.voyage.ship_cargo[0].item_id == "copper_ore" and player.voyage.ship_cargo[0].qty == 3, "Salvage tile grants 3 Copper Ore to ship cargo")
+	var event_feed := sea.find_child("VoyageEventFeed", true, false) as Label
+	_check(event_feed != null and event_feed.text.contains("Salvage"), "Voyage event feed shows recent loot pickup")
 	var voyage_snapshot: Dictionary = player.serialize()
 	player.deserialize(voyage_snapshot)
 	_check(player.voyage.is_active and player.voyage.ship_position == Vector2i(1, 0) and player.voyage.hazards == voyage_snapshot.voyage.hazards and player.voyage.exploration_sites == voyage_snapshot.voyage.exploration_sites and player.voyage.ship_cargo.size() == 1 and player.voyage.ship_cargo[0].qty == 3, "Active position, hazards, sites, and cargo round-trip through PlayerData save/reload")
@@ -212,8 +243,8 @@ func _run() -> void:
 	_check(int(player.bank.get("copper_ore", 0)) == 3 and player.backpack.size() == 2, "Bank UI withdraws one banked item")
 	saves.wipe_save()
 	if _failures == 0:
-		print("Open Sea and Stage 4 UI smoke tests passed.")
+		print("Stage 6 UI smoke tests passed.")
 		quit(0)
 	else:
-		push_error("%d UI smoke test(s) failed." % _failures)
+		push_error("%d Stage 6 UI smoke test(s) failed." % _failures)
 		quit(1)

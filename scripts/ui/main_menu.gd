@@ -88,7 +88,7 @@ func _layout_hotspots() -> void:
 			button.size = source_rect.size * ui_scale
 
 func _show_settings() -> void:
-	var box := _begin_modal("Settings", "Display and accessibility preferences are saved on this device.", Vector2(560, 360))
+	var box := _begin_modal("Settings", "Display, accessibility, and audio preferences are saved on this device.", Vector2(600, 470))
 	var size_row := HBoxContainer.new()
 	var size_label := _modal_label("Text size", 19)
 	size_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -102,6 +102,8 @@ func _show_settings() -> void:
 	size_picker.item_selected.connect(SettingsManager.set_text_size)
 	size_row.add_child(size_picker)
 	box.add_child(size_row)
+	box.add_child(_make_volume_control("Master volume", SettingsManager.master_volume, SettingsManager.set_master_volume))
+	box.add_child(_make_volume_control("SFX volume", SettingsManager.sfx_volume, SettingsManager.set_sfx_volume))
 	var motion := CheckButton.new()
 	motion.name = "ReducedMotionToggle"
 	motion.text = "Reduce screen transitions"
@@ -109,8 +111,34 @@ func _show_settings() -> void:
 	motion.custom_minimum_size.y = 52
 	motion.toggled.connect(SettingsManager.set_reduced_motion)
 	box.add_child(motion)
-	box.add_child(_modal_label("Reduced motion skips decorative scene fades. Text size applies to menu, port, and Open Sea controls.", 16))
+	box.add_child(_modal_label("Reduced motion skips decorative scene fades. Volume sliders update immediately and persist between launches.", 15))
 	_finish_modal(box)
+
+func _make_volume_control(title_text: String, volume: float, setter: Callable) -> VBoxContainer:
+	var container := VBoxContainer.new()
+	var row := HBoxContainer.new()
+	var title := _modal_label(title_text, 18)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(title)
+	var amount := _modal_label("%d%%" % roundi(volume * 100.0), 17)
+	amount.custom_minimum_size.x = 56
+	amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	row.add_child(amount)
+	container.add_child(row)
+	var slider := HSlider.new()
+	slider.name = title_text.replace(" ", "") + "Slider"
+	slider.accessibility_name = title_text
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.01
+	slider.value = volume
+	slider.custom_minimum_size.y = 30
+	slider.value_changed.connect(func(value: float):
+		amount.text = "%d%%" % roundi(value * 100.0)
+		setter.call(value)
+	)
+	container.add_child(slider)
+	return container
 
 func _show_character() -> void:
 	var box := _begin_modal("Choose Your Captain", "Select one permanent background perk. You can change it safely in port.", Vector2(720, 480))

@@ -84,7 +84,7 @@ func _run() -> void:
 				var relic_dropped: bool = false
 				for cargo_item in tier_voyage.ship_cargo:
 					if str(cargo_item.get("item_id", "")) == "sea_serpent_scale": relic_dropped = true
-				_check(boss_shot.success and relic_dropped, "Defeating the Tier 3 boss drops its unique Captain Relic")
+				_check(boss_shot.success and relic_dropped and tier_voyage.event_feed.back().contains("Unique relic recovered"), "Defeating the Tier 3 boss drops its unique Captain Relic and records the trigger")
 	var navigator = VoyageStateScript.new()
 	navigator.start_new_voyage(1, 78, "wooden_sloop", "navigator")
 	_check(navigator.movement_range() == 2, "Navigator gains one movement tile per action")
@@ -105,7 +105,7 @@ func _run() -> void:
 	_check(ration.success and field.ration_stock == 1 and field.movement_range() == 2, "Emergency ration grants a temporary +1-tile movement burst")
 	var field_copy = VoyageStateScript.new()
 	field_copy.from_dict(field.to_dict())
-	_check(field_copy.repair_stock == 1 and field_copy.ration_stock == 1 and field_copy.ration_burst_actions == 1, "Field supplies and unused ration burst survive voyage serialization")
+	_check(field_copy.repair_stock == 1 and field_copy.ration_stock == 1 and field_copy.ration_burst_actions == 1 and field_copy.event_feed == field.event_feed, "Field supplies, ration burst, and recent event feed survive voyage serialization")
 	var combat = VoyageStateScript.new()
 	combat.start_new_voyage(2, 808, "oak_brigantine", "merchant", {"cannons": 1, "sails": 0, "hull": 1}, 4)
 	_check(combat.chart_size == 12 and combat.enemies.size() == 2, "Tier 2 uses a larger chart and scaled enemy fleet")
@@ -133,7 +133,7 @@ func _run() -> void:
 	player.voyage.ship_cargo.append({"item_id": "sea_serpent_scale", "qty": 1})
 	var settlement: Dictionary = player._settle_voyage_result({"success": true, "sunk": false, "extracted": true, "message": "Extracted."})
 	_check(settlement.success and settlement.gold_reward == int(ceil(float(payout.extraction_gold_reward) * 1.10)), "Merchant extraction bonus is applied once to the guaranteed payout")
-	_check(player.bank.get("copper_ore", 0) == 2 and player.bank.get("mahogany_plank", 0) == 1 and player.bank.get("sea_serpent_scale", 0) == 1 and player.captain_relics.has("sea_serpent_scale") and player.career_stats.extractions == 1 and player.career_stats.gold_earned == settlement.gold_reward and player.career_stats.cargo_salvaged == 4, "Extraction banks cargo/relics, records the relic, and increments journal totals once")
+	_check(player.bank.get("copper_ore", 0) == 2 and player.bank.get("mahogany_plank", 0) == 1 and player.bank.get("sea_serpent_scale", 0) == 1 and player.captain_relics.has("sea_serpent_scale") and player.career_stats.extractions == 1 and player.career_stats.gold_earned == settlement.gold_reward + 450 and player.career_stats.cargo_salvaged == 4, "Extraction banks cargo/relics, records the relic, and increments journal totals including the bounty payout")
 	var career_snapshot: Dictionary = player.serialize()
 	player.deserialize(career_snapshot)
 	var relic_snapshot: Dictionary = player.serialize()
@@ -142,19 +142,58 @@ func _run() -> void:
 	var relic_voyage = VoyageStateScript.new()
 	relic_voyage.start_new_voyage(3, 333, "wooden_sloop", "merchant", {}, 10, ["sea_serpent_scale", "dreadnought_insignia"])
 	_check(relic_voyage.max_hull_hp() == 125 and relic_voyage.cannon_damage() == 30, "Owned Captain Relics grant passive hull and cannon bonuses")
+	player.reset_to_defaults()
+	var starting_contracts: Array[Dictionary] = player.get_bounty_contracts()
+	_check(starting_contracts.size() == 3 and int(starting_contracts[2].get("tier", 0)) == 1, "New save receives three active contracts with a cycle-assigned Tier 1 extraction")
+	var bounty_gold_before: int = player.gold
+	var bounty_doubloons_before: int = player.doubloons
+	player.voyage.start_new_voyage(1, 912, player.active_ship_id)
+	player._settle_voyage_result({"enemy_defeated": true})
+	var partial_bounty_snapshot: Dictionary = player.serialize()
+	player.deserialize(partial_bounty_snapshot)
+	_check(int(player.bounty_contracts[0].get("progress", 0)) == 1 and player.gold == bounty_gold_before, "Partial enemy-contract progress persists without prematurely paying its reward")
+	player.voyage.start_new_voyage(1, 913, player.active_ship_id)
+	player._settle_voyage_result({"enemy_defeated": true})
+	player._settle_voyage_result({"reward": {"item_id": "mahogany_plank", "qty": 1}})
+	var bounty_extraction: Dictionary = player._settle_voyage_result({"extracted": true, "message": "Safe extraction."})
+	_check(player.gold - bounty_gold_before - int(bounty_extraction.get("gold_reward", 0)) == 1000 and player.doubloons - bounty_doubloons_before == 4 and player.bank.get("iron_bar", 0) == 1 and player.bank.get("mahogany_plank", 0) == 1 and player.bank.get("mithril_bar", 0) == 1, "Gameplay settlement hooks grant configured bounty Gold, Doubloons, and materials")
+	var all_bounties_completed: bool = true
+	for contract in player.get_bounty_contracts():
+		if not bool(contract.get("completed", false)): all_bounties_completed = false
+	_check(all_bounties_completed, "Enemy, site, and matching-tier extraction contracts all record completion")
+	var bounty_snapshot: Dictionary = player.serialize()
+	player.deserialize(bounty_snapshot)
+	_check(player.bounty_contracts == bounty_snapshot.bounty_contracts and player.bank.get("mithril_bar", 0) == 1 and player.doubloons == 4, "Bounty progress and rewards survive player save restoration")
+	player.career_stats["voyages_started"] = Constants.BOUNTY_VOYAGES_PER_CYCLE
+	var next_cycle_contracts: Array[Dictionary] = player.get_bounty_contracts()
+	_check(player.bounty_cycle == 1 and int(next_cycle_contracts[2].get("tier", 0)) == 2 and int(next_cycle_contracts[0].get("progress", -1)) == 0, "Bounty cycle rotates after three launched voyages and resets progress")
+	var audio_cue: Node = root.get_node("AudioCue")
+	var required_cues: Array[String] = ["cannon_fire", "hull_hit", "repair", "ration", "salvage", "extraction"]
+	var audio_ready: bool = true
+	for cue_id in required_cues:
+		var audio_player: AudioStreamPlayer = audio_cue._players.get(cue_id) as AudioStreamPlayer
+		if audio_player == null or not (audio_player.stream is AudioStreamWAV) or (audio_player.stream as AudioStreamWAV).data.is_empty(): audio_ready = false
+	_check(audio_ready and AudioServer.get_bus_index("SFX") >= 0, "Procedural cue WAV streams and SFX bus initialize without external audio assets")
 	player.deserialize({"gold": 100, "bank": {}, "backpack": [], "skill_xp": {}, "voyage": {}})
 	_check(player.captain_background == "merchant" and int(player.career_stats.voyages_started) == 0, "Legacy saves migrate to default Captain and empty journal totals")
 	var settings_manager: Node = root.get_node("SettingsManager")
 	var previous_text_size: int = settings_manager.text_size_index
 	var previous_motion: bool = settings_manager.reduced_motion
+	var previous_master_volume: float = settings_manager.master_volume
+	var previous_sfx_volume: float = settings_manager.sfx_volume
 	settings_manager.set_text_size(2)
 	settings_manager.set_reduced_motion(true)
+	settings_manager.set_master_volume(0.37)
+	settings_manager.set_sfx_volume(0.61)
 	var reloaded_settings = SettingsManagerScript.new()
 	reloaded_settings._load_settings()
 	_check(reloaded_settings.text_size_index == 2 and reloaded_settings.reduced_motion and settings_manager.text_scale() == 1.15 and settings_manager.transition_duration(0.2) == 0.0, "Text size and reduced motion settings persist and affect presentation")
+	_check(is_equal_approx(reloaded_settings.master_volume, 0.37) and is_equal_approx(reloaded_settings.sfx_volume, 0.61), "Master and SFX audio volumes persist through settings reload")
 	reloaded_settings.free()
 	settings_manager.set_text_size(previous_text_size)
 	settings_manager.set_reduced_motion(previous_motion)
+	settings_manager.set_master_volume(previous_master_volume)
+	settings_manager.set_sfx_volume(previous_sfx_volume)
 	player.reset_to_defaults()
 	player.bank = Constants.VOYAGE_PROVISIONS[1].duplicate(true)
 	var launch_result: Dictionary = player.launch_voyage(1, 515)
@@ -173,8 +212,8 @@ func _run() -> void:
 	_check(bool(sale.success) and int(sale.proceeds) == 24 and player.gold == 1024 and int(player.bank.copper_ore) == 1, "Home Port market sale debits bank stock and credits Gold")
 	player.reset_to_defaults()
 	if failures == 0:
-		print("Stage 5 mechanics smoke tests passed.")
+		print("Stage 6 mechanics smoke tests passed.")
 		quit(0)
 	else:
-		push_error("%d mechanics smoke test(s) failed." % failures)
+		push_error("%d Stage 6 mechanics smoke test(s) failed." % failures)
 		quit(1)

@@ -79,6 +79,12 @@ const BOSS_DAMAGE_BY_TIER: Dictionary = {3: 28, 4: 38}
 const BOSS_LOOT_BY_TIER: Dictionary = {3: 2500, 4: 5000}
 const FIELD_REPAIR_HP: int = 40
 const RATION_BURST_TURNS: int = 1
+const BOUNTY_VOYAGES_PER_CYCLE: int = 3
+const BOUNTY_TEMPLATES: Array[Dictionary] = [
+	{"id": "fleet_hunt", "kind": "defeat_enemies", "title": "Fleet Hunt", "description": "Defeat 2 enemy vessels across your voyages.", "goal": 2, "gold": 250, "doubloons": 1, "item": "iron_bar", "quantity": 1},
+	{"id": "site_survey", "kind": "scavenge_site", "title": "Wreck & Island Survey", "description": "Finish scavenging 1 island or shipwreck site.", "goal": 1, "gold": 300, "doubloons": 1, "item": "mahogany_plank", "quantity": 1},
+	{"id": "tier_extraction", "kind": "extract_tier", "title": "Charted Extraction", "description": "Safely extract from the assigned voyage tier.", "goal": 1, "gold": 450, "doubloons": 2, "item": "mithril_bar", "quantity": 1}
+]
 const TIER_PROVISION_COSTS: Dictionary = {1: 224, 2: 440, 3: 664, 4: 1096}
 const TIER_BASE_GUARANTEE: Dictionary = {1: 280, 2: 550, 3: 830, 4: 1370}
 const COMBAT_RANGE: int = 3

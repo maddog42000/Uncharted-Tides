@@ -7,7 +7,7 @@ const SHIP_ICONS: Dictionary = {
 	"mahogany_galleon": "galleon_icon",
 	"dragonwood_man_owar": "manowar_icon"
 }
-const TAB_ICONS: Dictionary = {"Bank": "icon_bank", "Shipyard": "icon_shipyard", "Market": "icon_market", "Chart Table": "icon_chart"}
+const TAB_ICONS: Dictionary = {"Bank": "icon_bank", "Shipyard": "icon_shipyard", "Market": "icon_market", "Chart Table": "icon_chart", "Bounty Board": "icon_chart"}
 
 var _selected_tab: String = "Bank"
 var _selected_tier: int = 1
@@ -94,13 +94,14 @@ func _build_layout() -> void:
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_panel.add_child(scroll)
 	_content = VBoxContainer.new()
+	_content.name = "BountyBoardContent"
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_content.add_theme_constant_override("separation", 12)
 	scroll.add_child(_content)
 
 	var nav := HBoxContainer.new()
 	nav.add_theme_constant_override("separation", 10)
-	for tab in ["Bank", "Shipyard", "Market", "Chart Table"]:
+	for tab in ["Bank", "Shipyard", "Market", "Chart Table", "Bounty Board"]:
 		var button := _make_button(tab, 0)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.custom_minimum_size.y = 62
@@ -179,6 +180,7 @@ func _render_tab() -> void:
 		"Shipyard": _render_shipyard()
 		"Market": _render_market()
 		"Chart Table": _render_chart_table()
+		"Bounty Board": _render_bounty_board()
 	_refresh_resource_line()
 	SettingsManager.apply_to_tree(self)
 
@@ -397,6 +399,31 @@ func _render_chart_table() -> void:
 		var resume := _make_button("Resume Open Sea", 210)
 		resume.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/open_sea.tscn"))
 		_content.add_child(resume)
+
+func _render_bounty_board() -> void:
+	var contracts: Array[Dictionary] = PlayerData.get_bounty_contracts()
+	var cycle: int = int(PlayerData.bounty_cycle) + 1
+	_add_heading("Harbor Bounty Board", "Cycle %d · 3 active contracts · progresses across up to three launched voyages. Rewards are granted automatically on completion." % cycle)
+	for contract in contracts:
+		var card := PanelContainer.new()
+		card.custom_minimum_size.y = 112
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 14)
+		card.add_child(row)
+		var details := VBoxContainer.new()
+		details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		details.add_child(_subheading(str(contract.get("title", "Voyage Contract"))))
+		details.add_child(_body(str(contract.get("description", ""))))
+		var progress_text: String = "Completed" if bool(contract.get("completed", false)) else "Progress %d/%d" % [int(contract.get("progress", 0)), int(contract.get("goal", 1))]
+		details.add_child(_body(progress_text, true))
+		row.add_child(details)
+		var reward_item: String = str(contract.get("item", ""))
+		var reward_text: String = "%d Gold · %d Doubloons · %s ×%d" % [int(contract.get("gold", 0)), int(contract.get("doubloons", 0)), _item_name(reward_item), int(contract.get("quantity", 0))]
+		var reward_label := _body(reward_text)
+		reward_label.custom_minimum_size.x = 250
+		row.add_child(reward_label)
+		_content.add_child(card)
+	_content.add_child(_body("Defeating ships, completing site scavenging, and matching-tier safe extraction are tracked automatically. Progress and completed rewards persist through saves."))
 
 func _active_ship_tier() -> int:
 	var tier: int = 1

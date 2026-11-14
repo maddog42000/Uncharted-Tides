@@ -32,6 +32,7 @@ var reef_position: Vector2i = Vector2i(5, 5) # Compatibility alias for the first
 var wind_direction: Vector2i = Vector2i.RIGHT # Display-only environmental condition; never restricts course.
 var extraction_gold_reward: int = 0
 var last_action_message: String = ""
+var event_feed: Array[String] = []
 
 func start_new_voyage(p_tier: int, p_seed: int, p_ship_id: String = "wooden_sloop", p_background: String = "merchant", p_equipment: Dictionary = {}, p_ammunition: int = 0, p_relics: Array = [], p_repairs: int = 0, p_rations: int = 0) -> void:
 	is_active = true
@@ -60,6 +61,7 @@ func start_new_voyage(p_tier: int, p_seed: int, p_ship_id: String = "wooden_sloo
 	exploration_sites.clear()
 	enemies.clear()
 	last_action_message = ""
+	event_feed.clear()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = absi(p_seed)
 	var winds: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
@@ -177,6 +179,7 @@ func fire_at(position: Vector2i) -> Dictionary:
 		ship_cargo.clear()
 		is_active = false
 		message += " The ship sank; unbanked cargo was lost."
+	_record_event(message)
 	last_action_message = message
 	return {"success": true, "message": message, "sunk": sunk, "extracted": false, "hull_damage": retaliation, "enemy_defeated": not bool(enemy.alive), "ammunition": ammunition}
 
@@ -195,6 +198,7 @@ func use_field_repair() -> Dictionary:
 	var message: String = "Field repairs restore %d hull HP (%d repair plank(s) left)." % [restored, repair_stock]
 	if retaliation + drift_damage > 0: message += " Hazards/enemies deal %d damage during repairs." % (retaliation + drift_damage)
 	if sunk: message += " The ship sank; unbanked cargo was lost."
+	_record_event(message)
 	last_action_message = message
 	return {"success": true, "message": message, "sunk": sunk, "hull_damage": retaliation + drift_damage, "hull_restored": restored}
 
@@ -211,6 +215,7 @@ func use_emergency_ration() -> Dictionary:
 	var message: String = "Emergency ration consumed; next move gains +1 tile range (%d ration(s) left)." % ration_stock
 	if retaliation + drift_damage > 0: message += " Hazards/enemies deal %d damage." % (retaliation + drift_damage)
 	if sunk: message += " The ship sank; unbanked cargo was lost."
+	_record_event(message)
 	last_action_message = message
 	return {"success": true, "message": message, "sunk": sunk, "hull_damage": retaliation + drift_damage}
 
@@ -271,6 +276,7 @@ func move_to(destination: Vector2i) -> Dictionary:
 	var extracted: bool = is_active and ship_position == extraction_position
 	if extracted:
 		message += " Extraction ready; guaranteed reward is %d Gold." % extraction_gold_reward
+	_record_event(message)
 	last_action_message = message
 	return {"success": true, "message": message, "position": ship_position, "step_count": step_count, "hull_damage": damage, "sunk": sunk, "extracted": extracted, "loot_found": destination == salvage_position and salvage_collected}
 
@@ -300,6 +306,7 @@ func advance_exploration_tick() -> Dictionary:
 		reward = {"item_id": str(site.reward_item), "qty": int(site.reward_qty)}
 		ship_cargo.append(reward.duplicate())
 		message += " Recovered %d %s." % [int(site.reward_qty), str(Constants.ITEMS.get(site.reward_item, {}).get("name", site.reward_item))]
+	_record_event(message)
 	last_action_message = message
 	return {"success": true, "message": message, "sunk": sunk, "extracted": false, "hull_damage": damage, "reward": reward, "step_count": step_count}
 
@@ -383,6 +390,14 @@ func extraction_guarantee_covers_cost() -> bool:
 func _action_result(success: bool, message: String) -> Dictionary:
 	return {"success": success, "message": message, "position": ship_position, "step_count": step_count, "hull_damage": 0, "sunk": false, "extracted": false}
 
+func _record_event(message: String) -> void:
+	var normalized: String = message.strip_edges()
+	if normalized.is_empty():
+		return
+	event_feed.append(normalized)
+	while event_feed.size() > 6:
+		event_feed.pop_front()
+
 func _vector_to_array(value: Vector2i) -> Array[int]:
 	return [value.x, value.y]
 
@@ -392,7 +407,7 @@ func _array_to_vector(value: Variant, fallback: Vector2i) -> Vector2i:
 	return fallback
 
 func to_dict() -> Dictionary:
-	return {"is_active": is_active, "tier": tier, "seed_value": seed_value, "current_hull_hp": current_hull_hp, "ship_id": ship_id, "captain_background": captain_background, "ship_cargo": ship_cargo.duplicate(true), "chart_size": chart_size, "ship_position": _vector_to_array(ship_position), "extraction_position": _vector_to_array(extraction_position), "salvage_position": _vector_to_array(salvage_position), "salvage_collected": salvage_collected, "step_count": step_count, "hazards": hazards.duplicate(true), "exploration_sites": exploration_sites.duplicate(true), "reef_position": _vector_to_array(reef_position), "wind_direction": _vector_to_array(wind_direction), "extraction_gold_reward": extraction_gold_reward, "last_action_message": last_action_message, "enemies": enemies.duplicate(true), "ammunition": ammunition, "equipment_levels": equipment_levels.duplicate(true), "relics": relics.duplicate(), "repair_stock": repair_stock, "ration_stock": ration_stock, "ration_burst_actions": ration_burst_actions, "bosses_defeated": bosses_defeated}
+	return {"is_active": is_active, "tier": tier, "seed_value": seed_value, "current_hull_hp": current_hull_hp, "ship_id": ship_id, "captain_background": captain_background, "ship_cargo": ship_cargo.duplicate(true), "chart_size": chart_size, "ship_position": _vector_to_array(ship_position), "extraction_position": _vector_to_array(extraction_position), "salvage_position": _vector_to_array(salvage_position), "salvage_collected": salvage_collected, "step_count": step_count, "hazards": hazards.duplicate(true), "exploration_sites": exploration_sites.duplicate(true), "reef_position": _vector_to_array(reef_position), "wind_direction": _vector_to_array(wind_direction), "extraction_gold_reward": extraction_gold_reward, "last_action_message": last_action_message, "event_feed": event_feed.duplicate(), "enemies": enemies.duplicate(true), "ammunition": ammunition, "equipment_levels": equipment_levels.duplicate(true), "relics": relics.duplicate(), "repair_stock": repair_stock, "ration_stock": ration_stock, "ration_burst_actions": ration_burst_actions, "bosses_defeated": bosses_defeated}
 
 func from_dict(data: Dictionary) -> void:
 	is_active = bool(data.get("is_active", false))
@@ -431,6 +446,13 @@ func from_dict(data: Dictionary) -> void:
 	wind_direction = _array_to_vector(data.get("wind_direction", null), Vector2i.RIGHT)
 	extraction_gold_reward = int(data.get("extraction_gold_reward", _calculate_extraction_reward(tier)))
 	last_action_message = str(data.get("last_action_message", ""))
+	event_feed.clear()
+	var saved_feed: Variant = data.get("event_feed", [])
+	if saved_feed is Array:
+		for event_text in saved_feed:
+			event_feed.append(str(event_text))
+	while event_feed.size() > 6:
+		event_feed.pop_front()
 	ammunition = maxi(0, int(data.get("ammunition", 0)))
 	var saved_equipment: Variant = data.get("equipment_levels", {})
 	for slot in ["cannons", "sails", "hull"]:

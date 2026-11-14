@@ -19,6 +19,8 @@ var captain_background: String = "merchant"
 var career_stats: Dictionary = {"voyages_started": 0, "extractions": 0, "gold_earned": 0, "cargo_salvaged": 0}
 var equipment_levels: Dictionary = {"cannons": 0, "sails": 0, "hull": 0}
 var captain_relics: Array[String] = []
+var bounty_cycle: int = -1
+var bounty_contracts: Array[Dictionary] = []
 var voyage: VoyageState = VoyageStateScript.new()
 
 func _ready() -> void:
@@ -46,6 +48,9 @@ func reset_to_defaults() -> void:
 	career_stats = {"voyages_started": 0, "extractions": 0, "gold_earned": 0, "cargo_salvaged": 0}
 	equipment_levels = {"cannons": 0, "sails": 0, "hull": 0}
 	captain_relics.clear()
+	bounty_cycle = -1
+	bounty_contracts.clear()
+	_ensure_bounty_cycle()
 	voyage = VoyageStateScript.new()
 	inventory_updated.emit()
 	state_changed.emit()
@@ -56,6 +61,52 @@ func get_level(skill_name: String) -> int:
 		if current_xp >= xp_for_level[level]:
 			return level
 	return 1
+
+func get_bounty_contracts() -> Array[Dictionary]:
+	_ensure_bounty_cycle()
+	return bounty_contracts.duplicate(true)
+
+func _ensure_bounty_cycle() -> void:
+	var voyages_started: int = int(career_stats.get("voyages_started", 0))
+	var desired_cycle: int = int(floor(float(voyages_started) / float(Constants.BOUNTY_VOYAGES_PER_CYCLE)))
+	if bounty_cycle == desired_cycle and bounty_contracts.size() == Constants.BOUNTY_TEMPLATES.size():
+		return
+	bounty_cycle = desired_cycle
+	bounty_contracts.clear()
+	for template in Constants.BOUNTY_TEMPLATES:
+		var contract: Dictionary = template.duplicate(true)
+		contract["progress"] = 0
+		contract["completed"] = false
+		contract["cycle"] = bounty_cycle
+		if str(contract.get("kind", "")) == "extract_tier":
+			contract["tier"] = (bounty_cycle % 4) + 1
+			contract["description"] = "Safely extract from a Tier %d voyage." % int(contract.tier)
+		bounty_contracts.append(contract)
+
+func _progress_bounties(kind: String, amount: int = 1, extracted_tier: int = 0) -> Array[String]:
+	_ensure_bounty_cycle()
+	var completed_titles: Array[String] = []
+	if amount <= 0:
+		return completed_titles
+	for contract in bounty_contracts:
+		if bool(contract.get("completed", false)) or str(contract.get("kind", "")) != kind:
+			continue
+		if kind == "extract_tier" and int(contract.get("tier", 0)) != extracted_tier:
+			continue
+		contract["progress"] = mini(int(contract.get("goal", 1)), int(contract.get("progress", 0)) + amount)
+		if int(contract.progress) < int(contract.goal):
+			continue
+		contract["completed"] = true
+		var gold_reward: int = int(contract.get("gold", 0))
+		gold += gold_reward
+		career_stats["gold_earned"] = int(career_stats.get("gold_earned", 0)) + gold_reward
+		doubloons += int(contract.get("doubloons", 0))
+		var reward_item: String = str(contract.get("item", ""))
+		var reward_qty: int = maxi(0, int(contract.get("quantity", 0)))
+		if not reward_item.is_empty() and reward_qty > 0:
+			bank[reward_item] = int(bank.get(reward_item, 0)) + reward_qty
+		completed_titles.append(str(contract.get("title", "Bounty")))
+	return completed_titles
 
 func select_captain_background(background_id: String) -> Dictionary:
 	if voyage.is_active:
@@ -237,12 +288,18 @@ func use_field_repair() -> Dictionary:
 	if GameClock.is_clock_paused(): return {"success": false, "message": "Voyage paused while the app is suspended."}
 	if not voyage.is_active: return {"success": false, "message": "No active voyage."}
 	var result: Dictionary = voyage.use_field_repair()
+	if bool(result.get("success", false)):
+		AudioCue.play_cue("repair")
+		if int(result.get("hull_damage", 0)) > 0: AudioCue.play_cue("hull_hit")
 	return _settle_voyage_result(result) if bool(result.get("success", false)) else result
 
 func use_emergency_ration() -> Dictionary:
 	if GameClock.is_clock_paused(): return {"success": false, "message": "Voyage paused while the app is suspended."}
 	if not voyage.is_active: return {"success": false, "message": "No active voyage."}
 	var result: Dictionary = voyage.use_emergency_ration()
+	if bool(result.get("success", false)):
+		AudioCue.play_cue("ration")
+		if int(result.get("hull_damage", 0)) > 0: AudioCue.play_cue("hull_hit")
 	return _settle_voyage_result(result) if bool(result.get("success", false)) else result
 
 func fire_cannons_at(position: Vector2i) -> Dictionary:
@@ -252,6 +309,10 @@ func fire_cannons_at(position: Vector2i) -> Dictionary:
 		return {"success": false, "message": "No active voyage."}
 	var result: Dictionary = voyage.fire_at(position)
 	if bool(result.get("success", false)):
+		AudioCue.play_cue("cannon_fire")
+		if int(result.get("hull_damage", 0)) > 0: AudioCue.play_cue("hull_hit")
+		if str(result.get("message", "")).contains("Unique relic recovered"):
+			AudioCue.play_cue("salvage")
 		return _settle_voyage_result(result)
 	return result
 
@@ -281,6 +342,7 @@ func launch_voyage(tier: int, seed_value: int) -> Dictionary:
 		bank[item_id] = int(bank[item_id]) - int(provisions[item_id])
 		if int(bank[item_id]) <= 0:
 			bank.erase(item_id)
+	_ensure_bounty_cycle()
 	voyage.start_new_voyage(tier, seed_value, active_ship_id, captain_background, equipment_levels, int(provisions.get("cannonball", 0)), captain_relics, int(provisions.get("repair_plank", 0)), int(provisions.get("raw_sea_bass", 0)))
 	career_stats["voyages_started"] = int(career_stats.get("voyages_started", 0)) + 1
 	inventory_updated.emit()
@@ -308,6 +370,9 @@ func move_open_sea_to(destination: Vector2i) -> Dictionary:
 	var result: Dictionary = voyage.move_to(destination)
 	if not bool(result.get("success", false)):
 		return result
+	if int(result.get("hull_damage", 0)) > 0: AudioCue.play_cue("hull_hit")
+	if bool(result.get("loot_found", false)): AudioCue.play_cue("salvage")
+	if bool(result.get("extracted", false)): AudioCue.play_cue("extraction")
 	return _settle_voyage_result(result)
 
 func advance_exploration_tick() -> Dictionary:
@@ -318,6 +383,9 @@ func advance_exploration_tick() -> Dictionary:
 	var result: Dictionary = voyage.advance_exploration_tick()
 	if not bool(result.get("success", false)):
 		return result
+	var reward: Variant = result.get("reward", {})
+	if reward is Dictionary and not reward.is_empty(): AudioCue.play_cue("salvage")
+	if int(result.get("hull_damage", 0)) > 0: AudioCue.play_cue("hull_hit")
 	return _settle_voyage_result(result)
 
 func _settle_voyage_result(result: Dictionary) -> Dictionary:
@@ -327,6 +395,12 @@ func _settle_voyage_result(result: Dictionary) -> Dictionary:
 		result["message"] = str(result.get("message", "")) + " You returned to port with your ship tier intact."
 		state_changed.emit()
 		return result
+	var bounty_completions: Array[String] = []
+	if bool(result.get("enemy_defeated", false)):
+		bounty_completions.append_array(_progress_bounties("defeat_enemies"))
+	var site_reward: Variant = result.get("reward", {})
+	if site_reward is Dictionary and not site_reward.is_empty():
+		bounty_completions.append_array(_progress_bounties("scavenge_site"))
 	if bool(result.get("extracted", false)):
 		var banked: int = 0
 		for cargo_item in voyage.ship_cargo:
@@ -351,12 +425,16 @@ func _settle_voyage_result(result: Dictionary) -> Dictionary:
 		career_stats["gold_earned"] = int(career_stats.get("gold_earned", 0)) + guarantee
 		career_stats["extractions"] = int(career_stats.get("extractions", 0)) + 1
 		career_stats["cargo_salvaged"] = int(career_stats.get("cargo_salvaged", 0)) + banked
+		bounty_completions.append_array(_progress_bounties("extract_tier", 1, voyage.tier))
 		voyage.ship_cargo.clear()
 		voyage.is_active = false
 		result["banked_items"] = banked
 		result["gold_reward"] = guarantee
 		result["message"] = str(result.get("message", "")) + " Extraction banked %d item(s) and paid the guaranteed %d Gold recovery + profit reward." % [banked, guarantee]
 		inventory_updated.emit()
+	if not bounty_completions.is_empty():
+		result["bounties_completed"] = bounty_completions.duplicate()
+		result["message"] = str(result.get("message", "")) + " Bounty complete: %s! Rewards banked." % ", ".join(PackedStringArray(bounty_completions))
 	state_changed.emit()
 	return result
 
@@ -393,7 +471,7 @@ func extract_cargo_to_bank() -> int:
 
 func serialize() -> Dictionary:
 	return {
-		"version": 3,
+		"version": 4,
 		"tick_count": GameClock.tick_count,
 		"active_ship_id": active_ship_id,
 		"gold": gold,
@@ -402,6 +480,8 @@ func serialize() -> Dictionary:
 		"career_stats": career_stats.duplicate(true),
 		"equipment_levels": equipment_levels.duplicate(true),
 		"captain_relics": captain_relics.duplicate(),
+		"bounty_cycle": bounty_cycle,
+		"bounty_contracts": bounty_contracts.duplicate(true),
 		"skill_xp": skill_xp.duplicate(true),
 		"backpack": backpack.duplicate(true),
 		"bank": bank.duplicate(true),
@@ -421,6 +501,13 @@ func deserialize(data: Dictionary) -> void:
 	if loaded_stats is Dictionary:
 		for stat_id in career_stats:
 			career_stats[stat_id] = maxi(0, int(loaded_stats.get(stat_id, 0)))
+	bounty_cycle = int(data.get("bounty_cycle", -1))
+	bounty_contracts.clear()
+	var loaded_bounties: Variant = data.get("bounty_contracts", [])
+	if loaded_bounties is Array:
+		for contract in loaded_bounties:
+			if contract is Dictionary and contract.has("id"):
+				bounty_contracts.append(contract.duplicate(true))
 	var saved_equipment: Variant = data.get("equipment_levels", {})
 	equipment_levels = {"cannons": 0, "sails": 0, "hull": 0}
 	if saved_equipment is Dictionary:
@@ -448,5 +535,6 @@ func deserialize(data: Dictionary) -> void:
 			bank[str(item_id)] = maxi(0, int(loaded_bank[item_id]))
 	var loaded_voyage: Variant = data.get("voyage", {})
 	voyage.from_dict(loaded_voyage if loaded_voyage is Dictionary else {})
+	_ensure_bounty_cycle()
 	inventory_updated.emit()
 	state_changed.emit()
