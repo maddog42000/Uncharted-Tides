@@ -43,6 +43,14 @@ func _run() -> void:
 	_check(upgrade_result.success and player.active_ship_id == "oak_brigantine" and player.gold == 5000, "Valid ship upgrade spends expected costs")
 	_check(player.bank.get("oak_plank", 0) == 0 and player.bank.get("iron_bar", 0) == 0, "Upgrade consumes singular-ID materials")
 
+	player.active_ship_id = "wooden_sloop"
+	player.skill_xp["Sailing"] = player.xp_for_level[25]
+	player.bank["repair_plank"] = 4
+	player.bank["cannonball"] = 20
+	player.bank["raw_sea_bass"] = 5
+	var locked_tier: Dictionary = player.launch_voyage(2, 122)
+	_check(not locked_tier.success and locked_tier.message.contains("ship tier"), "Higher voyage tier requires matching ship progression")
+	player.active_ship_id = "oak_brigantine"
 	player.bank["repair_plank"] = 2
 	player.bank["cannonball"] = 10
 	player.bank["raw_sea_bass"] = 3
@@ -58,8 +66,8 @@ func _run() -> void:
 
 	saves.wipe_save()
 	if _failures == 0:
-		print("Stage 3 contract smoke tests passed.")
+		print("Stage 4 contract smoke tests passed.")
 		quit(0)
 	else:
-		push_error("%d Stage 3 contract smoke test(s) failed." % _failures)
+		push_error("%d Stage 4 contract smoke test(s) failed." % _failures)
 		quit(1)

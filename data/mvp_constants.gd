@@ -67,6 +67,19 @@ const ITEM_SELL_PRICES: Dictionary = {
 const VOYAGE_EXTRACTION_MARGIN: float = 0.25
 const HAZARD_COUNTS_BY_TIER: Dictionary = {1: 1, 2: 2, 3: 3, 4: 4}
 const HAZARD_DRIFT_EVERY_TURNS: Dictionary = {1: 5, 2: 4, 3: 3, 4: 2}
+const CHART_SIZE_BY_TIER: Dictionary = {1: 10, 2: 12, 3: 14, 4: 16}
+const ENEMY_COUNTS_BY_TIER: Dictionary = {1: 1, 2: 2, 3: 3, 4: 4}
+const ENEMY_HULL_BY_TIER: Dictionary = {1: 60, 2: 100, 3: 160, 4: 240}
+const ENEMY_DAMAGE_BY_TIER: Dictionary = {1: 12, 2: 18, 3: 25, 4: 32}
+const ENEMY_LOOT_BY_TIER: Dictionary = {1: 150, 2: 300, 3: 600, 4: 1000}
+const COMBAT_RANGE: int = 3
+const CANNON_BASE_DAMAGE: int = 25
+const EQUIPMENT_MAX_LEVEL: int = 3
+const EQUIPMENT: Dictionary = {
+	"cannons": {"name": "Broadside Cannons", "item": "iron_bar", "qty": [4, 8, 12], "plank": "oak_plank", "plank_qty": [4, 8, 12], "gold": [500, 1500, 4000], "doubloons": [0, 1, 2]},
+	"sails": {"name": "Reinforced Sails", "item": "mahogany_plank", "qty": [4, 8, 12], "plank": "oak_plank", "plank_qty": [6, 12, 18], "gold": [500, 1500, 4000], "doubloons": [0, 1, 2]},
+	"hull": {"name": "Hull Reinforcement", "item": "copper_ore", "qty": [8, 16, 24], "plank": "mahogany_plank", "plank_qty": [4, 8, 12], "gold": [500, 1500, 4000], "doubloons": [0, 1, 2]}
+}
 const SITE_WORK_TICKS: Dictionary = {"island": 2, "shipwreck": 3}
 
 # Voyage provisions are paid from the permanent bank when a voyage launches.
@@ -79,8 +92,8 @@ const VOYAGE_PROVISIONS: Dictionary = {
 }
 
 const VOYAGE_TIER_REQUIREMENTS: Dictionary = {
-	1: {"req_sailing": 1},
-	2: {"req_sailing": 25},
-	3: {"req_sailing": 50},
-	4: {"req_sailing": 75}
+	1: {"req_sailing": 1, "ship_tier": 1},
+	2: {"req_sailing": 25, "ship_tier": 2},
+	3: {"req_sailing": 50, "ship_tier": 3},
+	4: {"req_sailing": 75, "ship_tier": 4}
 }

@@ -212,7 +212,7 @@ func _run() -> void:
 	_check(int(player.bank.get("copper_ore", 0)) == 3 and player.backpack.size() == 2, "Bank UI withdraws one banked item")
 	saves.wipe_save()
 	if _failures == 0:
-		print("Open Sea and Stage 3 UI smoke tests passed.")
+		print("Open Sea and Stage 4 UI smoke tests passed.")
 		quit(0)
 	else:
 		push_error("%d UI smoke test(s) failed." % _failures)

@@ -12,6 +12,8 @@ var _hazard_label: Label
 var _site_label: Label
 var _status_label: Label
 var _explore_button: Button
+var _combat_button: Button
+var _combat_mode: bool = false
 var _message: String = ""
 var _transitioning: bool = false
 
@@ -64,7 +66,7 @@ func _build_screen() -> void:
 	chart_panel.add_child(chart_box)
 	chart_box.add_child(_label("CHART  ·  tap any highlighted destination", 16))
 	_grid = GridContainer.new()
-	_grid.columns = VoyageState.CHART_SIZE
+	_grid.columns = PlayerData.voyage.chart_size
 	_grid.add_theme_constant_override("h_separation", 3)
 	_grid.add_theme_constant_override("v_separation", 3)
 	chart_box.add_child(_grid)
@@ -93,6 +95,10 @@ func _build_screen() -> void:
 	_explore_button.custom_minimum_size = Vector2(0, 58)
 	_explore_button.pressed.connect(_on_explore_pressed)
 	details.add_child(_explore_button)
+	_combat_button = Button.new()
+	_combat_button.custom_minimum_size = Vector2(0, 58)
+	_combat_button.pressed.connect(_on_combat_mode_pressed)
+	details.add_child(_combat_button)
 	var rules := _label("Hazards shift toward you every few action ticks; higher voyage tiers add more hazards and increase drift frequency. Anchor on islands for 2 ticks or shipwrecks for 3 ticks to claim their guaranteed cargo. Extract at X to bank cargo and receive a Gold payout covering provisions plus a 25% margin.", 16)
 	rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	details.add_child(rules)
@@ -111,10 +117,10 @@ func _render_state() -> void:
 		return
 	var voyage: VoyageState = PlayerData.voyage
 	var ship_specs: Dictionary = Constants.SHIPS.get(voyage.ship_id, {})
-	var max_hp: int = maxi(1, int(ship_specs.get("max_hp", 100)))
+	var max_hp: int = voyage.max_hull_hp()
 	_position_label.text = "Position: (%d, %d)   Actions %d" % [voyage.ship_position.x, voyage.ship_position.y, voyage.step_count]
 	var perk_name: String = str(voyage.captain_background).capitalize()
-	_movement_label.text = "Movement range: %d tiles per action  ·  %s  ·  %s background" % [voyage.movement_range(), str(ship_specs.get("name", voyage.ship_id)), perk_name]
+	_movement_label.text = "Movement %d  ·  Cannons %d damage  ·  Ammo %d  ·  %s / %s" % [voyage.movement_range(), voyage.cannon_damage(), voyage.ammunition, str(ship_specs.get("name", voyage.ship_id)), perk_name]
 	_hull_label.text = "Hull: %d / %d HP" % [voyage.current_hull_hp, max_hp]
 	_hull_bar.max_value = max_hp
 	_hull_bar.value = voyage.current_hull_hp
@@ -136,6 +142,8 @@ func _render_state() -> void:
 		_site_label.text = "%s · exploration %d/%d action ticks%s" % [label, work, required, " · scavenged" if bool(site.get("completed", false)) else ""]
 		_explore_button.text = "Site scavenged" if bool(site.get("completed", false)) else "Work 1 anchored tick  (%d remaining)" % (required - work)
 		_explore_button.disabled = bool(site.get("completed", false)) or GameClock.is_clock_paused()
+	_combat_button.text = "Target enemy: ON · tap highlighted enemy" if _combat_mode else "Target enemy: OFF · cannon range %d" % Constants.COMBAT_RANGE
+	_combat_button.disabled = voyage.ammunition <= 0 or GameClock.is_clock_paused()
 	_status_label.text = _message
 	_render_chart()
 	SettingsManager.apply_to_tree(self)
@@ -145,20 +153,29 @@ func _render_chart() -> void:
 		_grid.remove_child(child)
 		child.queue_free()
 	var voyage: VoyageState = PlayerData.voyage
+	_grid.columns = voyage.chart_size
 	for y in range(voyage.chart_size):
 		for x in range(voyage.chart_size):
 			var tile := Vector2i(x, y)
 			var button := Button.new()
 			button.name = "Cell_%d_%d" % [x, y]
-			button.custom_minimum_size = Vector2(46, 43)
-			button.add_theme_font_size_override("font_size", 16)
+			button.custom_minimum_size = Vector2(34, 32) if voyage.chart_size >= 14 else (Vector2(38, 35) if voyage.chart_size == 12 else Vector2(42, 38))
+			button.add_theme_font_size_override("font_size", 14)
+			var enemy: Dictionary = voyage.enemy_at(tile)
 			var in_range: bool = voyage.can_move_to(tile)
+			var targetable: bool = voyage.can_fire_at(tile)
 			var is_current: bool = tile == voyage.ship_position
 			button.text = _tile_marker(tile, is_current)
+			if not enemy.is_empty():
+				button.text = "P" if str(enemy.get("type", "")).contains("sloop") else "G"
 			button.tooltip_text = "Tile (%d, %d)%s" % [x, y, " · movement available" if in_range else ""]
-			button.disabled = not in_range or GameClock.is_clock_paused()
+			button.disabled = (not targetable if _combat_mode else not in_range) or GameClock.is_clock_paused()
 			if is_current:
 				button.modulate = Color("#f3d48b")
+			elif not enemy.is_empty():
+				button.modulate = Color("#ff6961") if targetable else Color("#8f6262")
+			elif _combat_mode and targetable:
+				button.modulate = Color("#ffb347")
 			elif tile == voyage.extraction_position:
 				button.modulate = Color("#96d6ad")
 			elif not voyage.hazard_at(tile).is_empty():
@@ -176,6 +193,8 @@ func _tile_marker(tile: Vector2i, is_current: bool) -> String:
 	var voyage: VoyageState = PlayerData.voyage
 	if is_current:
 		return "S"
+	var enemy: Dictionary = voyage.enemy_at(tile)
+	if not enemy.is_empty(): return "P" if str(enemy.get("type", "")).contains("sloop") else "G"
 	if tile == voyage.extraction_position:
 		return "X"
 	if tile == voyage.salvage_position and not voyage.salvage_collected:
@@ -204,11 +223,17 @@ func _site_position(site: Dictionary) -> Vector2i:
 func _on_tile_pressed(destination: Vector2i) -> void:
 	if GameClock.is_clock_paused() or not PlayerData.voyage.is_active:
 		return
-	var result: Dictionary = PlayerData.move_open_sea_to(destination)
+	var result: Dictionary = PlayerData.fire_cannons_at(destination) if _combat_mode else PlayerData.move_open_sea_to(destination)
+	if _combat_mode: _combat_mode = false
 	_message = str(result.get("message", ""))
 	if bool(result.get("sunk", false)) or bool(result.get("extracted", false)):
 		_return_to_port(_message)
 		return
+	_render_state()
+
+func _on_combat_mode_pressed() -> void:
+	_combat_mode = not _combat_mode
+	_message = "Tap a highlighted enemy vessel to fire one cannonball; surviving enemies retaliate." if _combat_mode else "Targeting cancelled."
 	_render_state()
 
 func _on_explore_pressed() -> void:

@@ -20,27 +20,33 @@ var salvage_collected: bool = false
 var step_count: int = 0
 var hazards: Array[Dictionary] = []
 var exploration_sites: Array[Dictionary] = []
+var enemies: Array[Dictionary] = []
+var ammunition: int = 0
+var equipment_levels: Dictionary = {"cannons": 0, "sails": 0, "hull": 0}
 var reef_position: Vector2i = Vector2i(5, 5) # Compatibility alias for the first reef.
 var wind_direction: Vector2i = Vector2i.RIGHT # Display-only environmental condition; never restricts course.
 var extraction_gold_reward: int = 0
 var last_action_message: String = ""
 
-func start_new_voyage(p_tier: int, p_seed: int, p_ship_id: String = "wooden_sloop", p_background: String = "merchant") -> void:
+func start_new_voyage(p_tier: int, p_seed: int, p_ship_id: String = "wooden_sloop", p_background: String = "merchant", p_equipment: Dictionary = {}, p_ammunition: int = 0) -> void:
 	is_active = true
 	tier = clampi(p_tier, 1, 4)
 	seed_value = p_seed
 	ship_id = p_ship_id
 	captain_background = p_background
-	current_hull_hp = int(Constants.SHIPS.get(p_ship_id, {}).get("max_hp", 100))
+	equipment_levels = p_equipment.duplicate(true)
+	current_hull_hp = max_hull_hp()
+	ammunition = maxi(0, p_ammunition)
 	ship_cargo.clear()
-	chart_size = CHART_SIZE
+	chart_size = int(Constants.CHART_SIZE_BY_TIER.get(tier, CHART_SIZE))
 	ship_position = Vector2i.ZERO
-	extraction_position = Vector2i(CHART_SIZE - 1, CHART_SIZE - 1)
+	extraction_position = Vector2i(chart_size - 1, chart_size - 1)
 	salvage_position = Vector2i(1, 0)
 	salvage_collected = false
 	step_count = 0
 	hazards.clear()
 	exploration_sites.clear()
+	enemies.clear()
 	last_action_message = ""
 	var rng := RandomNumberGenerator.new()
 	rng.seed = absi(p_seed)
@@ -48,6 +54,7 @@ func start_new_voyage(p_tier: int, p_seed: int, p_ship_id: String = "wooden_sloo
 	wind_direction = winds[rng.randi_range(0, winds.size() - 1)]
 	_generate_hazards(rng)
 	_generate_sites(rng)
+	_generate_enemies(rng)
 	reef_position = _first_hazard_position("reef")
 	extraction_gold_reward = _calculate_extraction_reward(tier)
 
@@ -98,7 +105,71 @@ func _random_open_position(rng: RandomNumberGenerator) -> Vector2i:
 
 func movement_range() -> int:
 	var background_bonus: int = 1 if captain_background == "navigator" else 0
-	return maxi(1, int(Constants.SHIPS.get(ship_id, {}).get("movement_range", 1)) + background_bonus)
+	return maxi(1, int(Constants.SHIPS.get(ship_id, {}).get("movement_range", 1)) + background_bonus + int(equipment_levels.get("sails", 0)))
+
+func max_hull_hp() -> int:
+	return int(Constants.SHIPS.get(ship_id, {}).get("max_hp", 100)) + 50 * int(equipment_levels.get("hull", 0))
+
+func cannon_damage() -> int:
+	return int(Constants.CANNON_BASE_DAMAGE) + 15 * int(equipment_levels.get("cannons", 0))
+
+func _generate_enemies(rng: RandomNumberGenerator) -> void:
+	var count: int = int(Constants.ENEMY_COUNTS_BY_TIER.get(tier, 1))
+	for index in range(count):
+		var position := _random_open_position(rng)
+		var kind: String = "pirate_sloop" if tier < 3 or index % 2 == 0 else "pirate_galleon"
+		enemies.append({"id": "enemy_%d" % index, "type": kind, "position": _vector_to_array(position), "hull": int(Constants.ENEMY_HULL_BY_TIER.get(tier, 60)), "max_hull": int(Constants.ENEMY_HULL_BY_TIER.get(tier, 60)), "damage": int(Constants.ENEMY_DAMAGE_BY_TIER.get(tier, 12)), "loot_gold": int(Constants.ENEMY_LOOT_BY_TIER.get(tier, 150)), "alive": true})
+
+func enemy_at(position: Vector2i) -> Dictionary:
+	for enemy in enemies:
+		if bool(enemy.get("alive", false)) and _array_to_vector(enemy.get("position", []), Vector2i(-1, -1)) == position:
+			return enemy
+	return {}
+
+func can_fire_at(position: Vector2i) -> bool:
+	return is_active and ammunition > 0 and not enemy_at(position).is_empty() and absi(position.x - ship_position.x) + absi(position.y - ship_position.y) <= Constants.COMBAT_RANGE
+
+func fire_at(position: Vector2i) -> Dictionary:
+	if not is_active:
+		return _action_result(false, "No active voyage.")
+	if ammunition <= 0:
+		return _action_result(false, "No cannonballs remain.")
+	if not can_fire_at(position):
+		return _action_result(false, "Select a living enemy within cannon range.")
+	var enemy: Dictionary = enemy_at(position)
+	ammunition -= 1
+	step_count += 1
+	var damage: int = cannon_damage()
+	enemy["hull"] = maxi(0, int(enemy.get("hull", 0)) - damage)
+	var message: String = "Broadside hits %s for %d damage (%d/%d hull)." % [str(enemy.get("type", "enemy")).replace("_", " ").capitalize(), damage, int(enemy.hull), int(enemy.max_hull)]
+	if int(enemy.hull) <= 0:
+		enemy["alive"] = false
+		ship_cargo.append({"item_id": "gold_coin", "qty": int(enemy.get("loot_gold", 0))})
+		message += " Enemy defeated; %d Gold recovered as salvage." % int(enemy.loot_gold)
+	var retaliation: int = _enemy_attacks()
+	if retaliation > 0:
+		message += " Enemy return fire deals %d hull damage." % retaliation
+	var sunk: bool = current_hull_hp <= 0
+	if sunk:
+		ship_cargo.clear()
+		is_active = false
+		message += " The ship sank; unbanked cargo was lost."
+	last_action_message = message
+	return {"success": true, "message": message, "sunk": sunk, "extracted": false, "hull_damage": retaliation, "enemy_defeated": not bool(enemy.alive), "ammunition": ammunition}
+
+func _enemy_attacks() -> int:
+	var total: int = 0
+	for enemy in enemies:
+		if not bool(enemy.get("alive", false)):
+			continue
+		var position: Vector2i = _array_to_vector(enemy.get("position", []), Vector2i(-1, -1))
+		if absi(position.x - ship_position.x) + absi(position.y - ship_position.y) <= 3:
+			var damage: int = int(enemy.get("damage", 0))
+			if captain_background == "shipwright":
+				damage = maxi(1, int(ceil(float(damage) * 0.8)))
+			current_hull_hp = maxi(0, current_hull_hp - damage)
+			total += damage
+	return total
 
 func _mitigate_hazard_damage(raw_damage: int) -> int:
 	if captain_background == "shipwright" and raw_damage > 0:
@@ -260,7 +331,7 @@ func _array_to_vector(value: Variant, fallback: Vector2i) -> Vector2i:
 	return fallback
 
 func to_dict() -> Dictionary:
-	return {"is_active": is_active, "tier": tier, "seed_value": seed_value, "current_hull_hp": current_hull_hp, "ship_id": ship_id, "captain_background": captain_background, "ship_cargo": ship_cargo.duplicate(true), "chart_size": chart_size, "ship_position": _vector_to_array(ship_position), "extraction_position": _vector_to_array(extraction_position), "salvage_position": _vector_to_array(salvage_position), "salvage_collected": salvage_collected, "step_count": step_count, "hazards": hazards.duplicate(true), "exploration_sites": exploration_sites.duplicate(true), "reef_position": _vector_to_array(reef_position), "wind_direction": _vector_to_array(wind_direction), "extraction_gold_reward": extraction_gold_reward, "last_action_message": last_action_message}
+	return {"is_active": is_active, "tier": tier, "seed_value": seed_value, "current_hull_hp": current_hull_hp, "ship_id": ship_id, "captain_background": captain_background, "ship_cargo": ship_cargo.duplicate(true), "chart_size": chart_size, "ship_position": _vector_to_array(ship_position), "extraction_position": _vector_to_array(extraction_position), "salvage_position": _vector_to_array(salvage_position), "salvage_collected": salvage_collected, "step_count": step_count, "hazards": hazards.duplicate(true), "exploration_sites": exploration_sites.duplicate(true), "reef_position": _vector_to_array(reef_position), "wind_direction": _vector_to_array(wind_direction), "extraction_gold_reward": extraction_gold_reward, "last_action_message": last_action_message, "enemies": enemies.duplicate(true), "ammunition": ammunition, "equipment_levels": equipment_levels.duplicate(true)}
 
 func from_dict(data: Dictionary) -> void:
 	is_active = bool(data.get("is_active", false))
@@ -299,3 +370,13 @@ func from_dict(data: Dictionary) -> void:
 	wind_direction = _array_to_vector(data.get("wind_direction", null), Vector2i.RIGHT)
 	extraction_gold_reward = int(data.get("extraction_gold_reward", _calculate_extraction_reward(tier)))
 	last_action_message = str(data.get("last_action_message", ""))
+	ammunition = maxi(0, int(data.get("ammunition", 0)))
+	var saved_equipment: Variant = data.get("equipment_levels", {})
+	for slot in ["cannons", "sails", "hull"]:
+		equipment_levels[slot] = clampi(int(saved_equipment.get(slot, 0)), 0, Constants.EQUIPMENT_MAX_LEVEL) if saved_equipment is Dictionary else 0
+	enemies.clear()
+	var saved_enemies: Variant = data.get("enemies", [])
+	if saved_enemies is Array:
+		for enemy in saved_enemies:
+			if enemy is Dictionary and enemy.has("position"):
+				enemies.append(enemy.duplicate(true))

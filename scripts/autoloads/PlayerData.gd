@@ -17,6 +17,7 @@ var doubloons: int = 0
 var active_ship_id: String = "wooden_sloop"
 var captain_background: String = "merchant"
 var career_stats: Dictionary = {"voyages_started": 0, "extractions": 0, "gold_earned": 0, "cargo_salvaged": 0}
+var equipment_levels: Dictionary = {"cannons": 0, "sails": 0, "hull": 0}
 var voyage: VoyageState = VoyageStateScript.new()
 
 func _ready() -> void:
@@ -42,6 +43,7 @@ func reset_to_defaults() -> void:
 	active_ship_id = "wooden_sloop"
 	captain_background = "merchant"
 	career_stats = {"voyages_started": 0, "extractions": 0, "gold_earned": 0, "cargo_salvaged": 0}
+	equipment_levels = {"cannons": 0, "sails": 0, "hull": 0}
 	voyage = VoyageStateScript.new()
 	inventory_updated.emit()
 	state_changed.emit()
@@ -201,6 +203,44 @@ func upgrade_ship(target_ship_id: String) -> Dictionary:
 	state_changed.emit()
 	return {"success": true, "message": "Upgraded to %s." % str(ship_specs.get("name", target_ship_id))}
 
+func upgrade_equipment(slot: String) -> Dictionary:
+	if voyage.is_active:
+		return {"success": false, "message": "Equipment upgrades are locked during a voyage."}
+	var recipe: Dictionary = Constants.EQUIPMENT.get(slot, {})
+	if recipe.is_empty():
+		return {"success": false, "message": "Unknown ship equipment."}
+	var next_level: int = int(equipment_levels.get(slot, 0))
+	if next_level >= Constants.EQUIPMENT_MAX_LEVEL:
+		return {"success": false, "message": "This equipment is fully upgraded."}
+	var primary: String = str(recipe.item)
+	var secondary: String = str(recipe.plank)
+	var primary_qty: int = int(recipe.qty[next_level])
+	var secondary_qty: int = int(recipe.plank_qty[next_level])
+	var cost_gold: int = int(recipe.gold[next_level])
+	var cost_doubloons: int = int(recipe.doubloons[next_level])
+	if int(bank.get(primary, 0)) < primary_qty or int(bank.get(secondary, 0)) < secondary_qty or gold < cost_gold or doubloons < cost_doubloons:
+		return {"success": false, "message": "Need %d %s, %d %s, %d Gold and %d Doubloon(s)." % [primary_qty, primary, secondary_qty, secondary, cost_gold, cost_doubloons]}
+	bank[primary] = int(bank[primary]) - primary_qty
+	bank[secondary] = int(bank[secondary]) - secondary_qty
+	if int(bank[primary]) <= 0: bank.erase(primary)
+	if int(bank[secondary]) <= 0: bank.erase(secondary)
+	gold -= cost_gold
+	doubloons -= cost_doubloons
+	equipment_levels[slot] = next_level + 1
+	inventory_updated.emit()
+	state_changed.emit()
+	return {"success": true, "message": "%s upgraded to Level %d." % [str(recipe.name), next_level + 1]}
+
+func fire_cannons_at(position: Vector2i) -> Dictionary:
+	if GameClock.is_clock_paused():
+		return {"success": false, "message": "Voyage paused while the app is suspended."}
+	if not voyage.is_active:
+		return {"success": false, "message": "No active voyage."}
+	var result: Dictionary = voyage.fire_at(position)
+	if bool(result.get("success", false)):
+		return _settle_voyage_result(result)
+	return result
+
 func launch_voyage(tier: int, seed_value: int) -> Dictionary:
 	if voyage.is_active:
 		return {"success": false, "message": "A voyage is already active."}
@@ -211,6 +251,13 @@ func launch_voyage(tier: int, seed_value: int) -> Dictionary:
 	var required_sailing: int = int(tier_requirements.get("req_sailing", 1))
 	if get_level("Sailing") < required_sailing:
 		return {"success": false, "message": "Requires Sailing Level %d." % required_sailing}
+	var required_ship_tier: int = int(tier_requirements.get("ship_tier", 1))
+	var current_ship_tier: int = 1
+	for ship_key in Constants.SHIPS:
+		if str(ship_key) == active_ship_id: break
+		current_ship_tier += 1
+	if current_ship_tier < required_ship_tier:
+		return {"success": false, "message": "Requires ship tier %d." % required_ship_tier}
 	for item_id in provisions:
 		var needed: int = int(provisions[item_id])
 		if int(bank.get(item_id, 0)) < needed:
@@ -220,7 +267,7 @@ func launch_voyage(tier: int, seed_value: int) -> Dictionary:
 		bank[item_id] = int(bank[item_id]) - int(provisions[item_id])
 		if int(bank[item_id]) <= 0:
 			bank.erase(item_id)
-	voyage.start_new_voyage(tier, seed_value, active_ship_id, captain_background)
+	voyage.start_new_voyage(tier, seed_value, active_ship_id, captain_background, equipment_levels, int(provisions.get("cannonball", 0)))
 	career_stats["voyages_started"] = int(career_stats.get("voyages_started", 0)) + 1
 	inventory_updated.emit()
 	state_changed.emit()
@@ -271,7 +318,10 @@ func _settle_voyage_result(result: Dictionary) -> Dictionary:
 		for cargo_item in voyage.ship_cargo:
 			var item_id: String = str(cargo_item.get("item_id", ""))
 			var quantity: int = maxi(1, int(cargo_item.get("qty", 1)))
-			if not item_id.is_empty():
+			if item_id == "gold_coin":
+				gold += quantity
+				career_stats["gold_earned"] = int(career_stats.get("gold_earned", 0)) + quantity
+			elif not item_id.is_empty():
 				bank[item_id] = int(bank.get(item_id, 0)) + quantity
 				banked += quantity
 		var guarantee: int = voyage.extraction_gold_reward
@@ -330,6 +380,7 @@ func serialize() -> Dictionary:
 		"doubloons": doubloons,
 		"captain_background": captain_background,
 		"career_stats": career_stats.duplicate(true),
+		"equipment_levels": equipment_levels.duplicate(true),
 		"skill_xp": skill_xp.duplicate(true),
 		"backpack": backpack.duplicate(true),
 		"bank": bank.duplicate(true),
@@ -349,6 +400,11 @@ func deserialize(data: Dictionary) -> void:
 	if loaded_stats is Dictionary:
 		for stat_id in career_stats:
 			career_stats[stat_id] = maxi(0, int(loaded_stats.get(stat_id, 0)))
+	var saved_equipment: Variant = data.get("equipment_levels", {})
+	equipment_levels = {"cannons": 0, "sails": 0, "hull": 0}
+	if saved_equipment is Dictionary:
+		for slot in equipment_levels:
+			equipment_levels[slot] = clampi(int(saved_equipment.get(slot, 0)), 0, Constants.EQUIPMENT_MAX_LEVEL)
 	var loaded_xp: Variant = data.get("skill_xp", {})
 	for skill in Constants.SKILLS:
 		skill_xp[skill] = maxi(0, int(loaded_xp.get(skill, 0))) if loaded_xp is Dictionary else 0

@@ -70,6 +70,18 @@ func _run() -> void:
 	shipwright.hazards.append({"id": "test_reef", "type": "reef", "position": [1, 0], "damage": 25})
 	var mitigated: Dictionary = shipwright.move_to(Vector2i(1, 0))
 	_check(mitigated.success and int(mitigated.hull_damage) == 20 and shipwright.current_hull_hp == 80, "Shipwright reduces collision hull damage by twenty percent")
+	var combat = VoyageStateScript.new()
+	combat.start_new_voyage(2, 808, "oak_brigantine", "merchant", {"cannons": 1, "sails": 0, "hull": 1}, 4)
+	_check(combat.chart_size == 12 and combat.enemies.size() == 2, "Tier 2 uses a larger chart and scaled enemy fleet")
+	_check(combat.cannon_damage() == 40 and combat.max_hull_hp() == 300 and combat.movement_range() == 2, "Equipment directly increases cannon damage and maximum hull")
+	var target: Vector2i = Vector2i(2, 0)
+	combat.enemies[0]["position"] = [target.x, target.y]
+	var shot: Dictionary = combat.fire_at(target)
+	_check(shot.success and combat.ammunition == 3 and int(combat.enemies[0].hull) == 60 and combat.current_hull_hp < combat.max_hull_hp(), "Cannon fire consumes ammo, damages enemy hull, and triggers retaliation")
+	var combat_copy = VoyageStateScript.new()
+	combat_copy.from_dict(combat.to_dict())
+	_check(combat_copy.enemies == combat.enemies and combat_copy.ammunition == combat.ammunition and combat_copy.equipment_levels == combat.equipment_levels, "Enemy hull, ammunition, and equipment survive voyage serialization")
+
 	var round_trip = VoyageStateScript.new()
 	round_trip.from_dict(exploring.to_dict())
 	print("Serialization comparison: hazards=%s sites=%s" % [str(round_trip.hazards == exploring.hazards), str(round_trip.exploration_sites == exploring.exploration_sites)])
@@ -102,12 +114,20 @@ func _run() -> void:
 	settings_manager.set_text_size(previous_text_size)
 	settings_manager.set_reduced_motion(previous_motion)
 	player.reset_to_defaults()
+	player.bank["iron_bar"] = 4
+	player.bank["oak_plank"] = 4
+	var cannon_upgrade: Dictionary = player.upgrade_equipment("cannons")
+	_check(cannon_upgrade.success and int(player.equipment_levels.cannons) == 1, "Shipyard crafting consumes materials and upgrades cannon level")
+	var equipment_save: Dictionary = player.serialize()
+	player.deserialize(equipment_save)
+	_check(int(player.equipment_levels.cannons) == 1, "Ship equipment levels persist in player save")
+	player.reset_to_defaults()
 	player.bank["copper_ore"] = 3
 	var sale: Dictionary = player.sell_market_item("copper_ore", 2)
 	_check(bool(sale.success) and int(sale.proceeds) == 24 and player.gold == 1024 and int(player.bank.copper_ore) == 1, "Home Port market sale debits bank stock and credits Gold")
 	player.reset_to_defaults()
 	if failures == 0:
-		print("Stage 3 mechanics smoke tests passed.")
+		print("Stage 4 mechanics smoke tests passed.")
 		quit(0)
 	else:
 		push_error("%d mechanics smoke test(s) failed." % failures)

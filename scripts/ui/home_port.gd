@@ -102,17 +102,17 @@ func _build_layout() -> void:
 	nav.add_theme_constant_override("separation", 10)
 	for tab in ["Bank", "Shipyard", "Market", "Chart Table"]:
 		var button := _make_button(tab, 0)
-			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			button.custom_minimum_size.y = 62
-			button.pressed.connect(_select_tab.bind(tab))
-			_tab_buttons[tab] = button
-			var button_ref: WeakRef = weakref(button)
-			var icon_id: String = str(TAB_ICONS[tab])
-			AssetManager.request_texture(icon_id, func(texture: Texture2D):
-				var target_button := button_ref.get_ref() as Button
-				if target_button != null and texture != null:
-					target_button.icon = texture
-					target_button.expand_icon = true
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.custom_minimum_size.y = 62
+		button.pressed.connect(_select_tab.bind(tab))
+		_tab_buttons[tab] = button
+		var button_ref: WeakRef = weakref(button)
+		var icon_id: String = str(TAB_ICONS[tab])
+		AssetManager.request_texture(icon_id, func(texture: Texture2D):
+			var target_button := button_ref.get_ref() as Button
+			if target_button != null and texture != null:
+				target_button.icon = texture
+				target_button.expand_icon = true
 		)
 		nav.add_child(button)
 	layout.add_child(nav)
@@ -271,16 +271,16 @@ func _render_shipyard() -> void:
 		row.add_theme_constant_override("separation", 16)
 		card.add_child(row)
 		var icon := TextureRect.new()
-			icon.custom_minimum_size = Vector2(76, 76)
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			row.add_child(icon)
-			var icon_ref: WeakRef = weakref(icon)
-			var icon_id: String = str(SHIP_ICONS.get(ship_id, ""))
-			AssetManager.request_texture(icon_id, func(texture: Texture2D):
-				var target_icon := icon_ref.get_ref() as TextureRect
-				if target_icon != null and texture != null:
-					target_icon.texture = texture
+		icon.custom_minimum_size = Vector2(76, 76)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		row.add_child(icon)
+		var icon_ref: WeakRef = weakref(icon)
+		var icon_id: String = str(SHIP_ICONS.get(ship_id, ""))
+		AssetManager.request_texture(icon_id, func(texture: Texture2D):
+			var target_icon := icon_ref.get_ref() as TextureRect
+			if target_icon != null and texture != null:
+				target_icon.texture = texture
 		)
 		var detail := VBoxContainer.new()
 		detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -316,6 +316,22 @@ func _render_shipyard() -> void:
 		action.pressed.connect(func(): _handle_transaction(PlayerData.upgrade_ship(captured_ship_id)))
 		row.add_child(action)
 		_content.add_child(card)
+
+	_add_heading("Crew & Equipment", "Craft permanent refits from gathered resources, Gold, and Doubloons. Each level directly improves ship performance.")
+	for slot in ["cannons", "sails", "hull"]:
+		var recipe: Dictionary = Constants.EQUIPMENT[slot]
+		var level: int = int(PlayerData.equipment_levels.get(slot, 0))
+		var row := HBoxContainer.new()
+		var effect: String = "+15 cannon damage" if slot == "cannons" else ("+1 movement tile/action" if slot == "sails" else "+50 maximum hull HP")
+		var label := _body("%s  ·  Level %d/%d  ·  %s" % [str(recipe.name), level, Constants.EQUIPMENT_MAX_LEVEL, effect], true)
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(label)
+		var upgrade := _make_button("Craft / Upgrade", 190)
+		upgrade.disabled = level >= Constants.EQUIPMENT_MAX_LEVEL or PlayerData.voyage.is_active
+		var captured_slot: String = slot
+		upgrade.pressed.connect(func(): _handle_transaction(PlayerData.upgrade_equipment(captured_slot)))
+		row.add_child(upgrade)
+		_content.add_child(row)
 
 func _render_market() -> void:
 	_add_heading("Market & Trade", "Buy provisions into your Bank or sell banked goods for Gold. Selling is unavailable at sea.")
@@ -355,7 +371,7 @@ func _render_chart_table() -> void:
 		tier_row.add_child(tier_button)
 	_content.add_child(tier_row)
 	var req: Dictionary = Constants.VOYAGE_TIER_REQUIREMENTS.get(_selected_tier, {})
-	_content.add_child(_subheading("Tier %d  |  Requires Sailing Level %d" % [_selected_tier, int(req.get("req_sailing", 1))]))
+	_content.add_child(_subheading("Tier %d  |  Requires Sailing Level %d and Ship Tier %d" % [_selected_tier, int(req.get("req_sailing", 1)), int(req.get("ship_tier", 1))]))
 	var provisions: Dictionary = Constants.VOYAGE_PROVISIONS.get(_selected_tier, {})
 	for item_id in provisions:
 		var needed: int = int(provisions[item_id])
@@ -368,7 +384,7 @@ func _render_chart_table() -> void:
 	market.pressed.connect(_select_tab.bind("Market"))
 	actions.add_child(market)
 	var launch := _make_button("Set Sail — Tier %d" % _selected_tier, 240)
-	var can_launch: bool = not PlayerData.voyage.is_active and PlayerData.get_level("Sailing") >= int(req.get("req_sailing", 1))
+	var can_launch: bool = not PlayerData.voyage.is_active and PlayerData.get_level("Sailing") >= int(req.get("req_sailing", 1)) and _active_ship_tier() >= int(req.get("ship_tier", 1))
 	for item_id in provisions:
 		if int(PlayerData.bank.get(item_id, 0)) < int(provisions[item_id]):
 			can_launch = false
@@ -381,6 +397,13 @@ func _render_chart_table() -> void:
 		var resume := _make_button("Resume Open Sea", 210)
 		resume.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/open_sea.tscn"))
 		_content.add_child(resume)
+
+func _active_ship_tier() -> int:
+	var tier: int = 1
+	for ship_id in Constants.SHIPS:
+		if str(ship_id) == PlayerData.active_ship_id: return tier
+		tier += 1
+	return 1
 
 func _launch_selected_voyage() -> void:
 	var seed_value: int = int(Time.get_unix_time_from_system()) ^ randi()
