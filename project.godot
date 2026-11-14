@@ -1,0 +1,26 @@
+; Uncharted Tides — Stage 3 Core Loop
+; Open this folder in Godot 4.7.2 or compatible Godot 4.x Android editor.
+config_version=5
+
+[application]
+config/name="Uncharted Tides — Stage 3 Core Loop"
+run/main_scene="res://scenes/main_menu.tscn"
+config/features=PackedStringArray("4.7", "Mobile")
+
+[autoload]
+GameClock="*res://scripts/autoloads/GameClock.gd"
+PlayerData="*res://scripts/autoloads/PlayerData.gd"
+SaveManager="*res://scripts/autoloads/SaveManager.gd"
+AssetManager="*res://scripts/autoloads/AssetManager.gd"
+SettingsManager="*res://scripts/autoloads/SettingsManager.gd"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=0
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
