@@ -11,7 +11,6 @@ const CUE_SPECS: Dictionary = {
 }
 
 var _players: Dictionary = {}
-var _streams: Dictionary = {}
 
 func _ready() -> void:
 	_ensure_sfx_bus()

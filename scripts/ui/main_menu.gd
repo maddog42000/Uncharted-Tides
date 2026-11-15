@@ -324,7 +324,7 @@ func _begin_modal(title_text: String, body_text: String, panel_size: Vector2) ->
 	_modal_layer.add_child(panel)
 	return box
 
-func _finish_modal(box: VBoxContainer) -> void:
+func _finish_modal(_box: VBoxContainer) -> void:
 	var close := Button.new()
 	close.text = "Close"
 	close.custom_minimum_size = Vector2(0, 52)
