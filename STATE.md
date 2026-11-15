@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-Stage 8 release polish on `feature/stage8-release-polish`, based on user-tested Stage 7 commit `baa337d`, merged into `main`. Adds a first-voyage Captain's Briefing, separate Settings replay/dismissal state, confirmed save reset, migration hardening, tier-scaled Sailing XP and site rewards, and responsive scrollable Main Menu modals. Android APK builds remain manual-only (`workflow_dispatch`); do not trigger during active development. Stage 8 Android device verification is pending.
+Unified v1.0.0 baseline on `main`, fast-forwarded from user-tested Stage 8 commit `0296d7a` (branch `feature/stage8-release-polish`). Includes the first-voyage Captain's Briefing, separate Settings replay/dismissal state, confirmed save reset, migration hardening, tier-scaled Sailing XP and site rewards, and responsive scrollable Main Menu modals. The user tested the merged Stage 8 build on an Android phone in Godot and reported it working cleanly. Android APK builds remain manual-only (`workflow_dispatch`); no APK build was triggered.
 
 ## Scenes
 
@@ -46,4 +46,4 @@ Stage 8 release polish on `feature/stage8-release-polish`, based on user-tested 
 
 ## Final verification and release
 
-After all Stage 8 source, tests, and documentation changes are complete, run the Godot 4.7.2 headless editor parse and then each of the three suites once: `stage2_contract_smoke.gd`, `stage2_mechanics_smoke.gd`, and `stage2_ui_smoke.gd`. This is a headless smoke pass, not a substitute for Android landscape/touch/lifecycle testing. Keep the Android workflow manual-only and do not trigger APK compilation.
+Stage 8 final verification passed on commit `0296d7a`: Godot 4.7.2 headless editor parse plus the contract, mechanics, and UI smoke suites. User-reported Android phone testing also passed. These checks do not replace future landscape/touch/lifecycle testing. Keep the Android workflow manual-only; no APK compilation has been triggered.

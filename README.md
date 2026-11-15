@@ -1,6 +1,6 @@
-# Uncharted Tides — Stage 8 Release Polish
+# Uncharted Tides — v1.0.0
 
-A Godot 4.7.2 mobile-landscape project containing the Main Menu, Home Port, and playable Tier 1–4 Open Sea loop. Stage 8 adds first-voyage onboarding, safe save management and migration, responsive modal layouts, and a full progression/economy pass. Stage 8 Android-device verification remains pending.
+A Godot 4.7.2 mobile-landscape project containing the Main Menu, Home Port, and playable Tier 1–4 Open Sea loop. The v1.0.0 baseline includes first-voyage onboarding, safe save management and migration, responsive modal layouts, and the Stage 8 progression/economy pass. The user-tested Stage 8 build was verified on an Android phone in Godot. The Android APK workflow remains manual-only, and no APK compilation was triggered for this release baseline.
 
 ## Open and run
 
