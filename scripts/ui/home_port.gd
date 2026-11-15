@@ -1,6 +1,7 @@
 extends Control
 
 const Constants = preload("res://data/mvp_constants.gd")
+const HarborBackdrop = preload("res://scripts/ui/harbor_backdrop.gd")
 const SHIP_ICONS: Dictionary = {
 	"wooden_sloop": "sloop_icon",
 	"oak_brigantine": "brigantine_icon",
@@ -14,6 +15,9 @@ var _selected_tier: int = 1
 var _content: VBoxContainer
 var _status: Label
 var _resource_line: Label
+var _ship_summary: Label
+var _voyage_summary: Label
+var _hero_action: Button
 var _tab_buttons: Dictionary = {}
 var _transitioning: bool = false
 
@@ -36,57 +40,79 @@ func _ready() -> void:
 
 func _build_layout() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var background := ColorRect.new()
-	background.color = Color("#15191f")
+	var background := HarborBackdrop.new()
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(background)
+	var shade := ColorRect.new()
+	shade.color = Color(0.025, 0.08, 0.12, 0.15)
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(shade)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_top", 18)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_left", 18)
+	margin.add_theme_constant_override("margin_right", 18)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
 	add_child(margin)
 	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 12)
+	layout.add_theme_constant_override("separation", 9)
 	margin.add_child(layout)
 
 	var header := HBoxContainer.new()
-	header.custom_minimum_size = Vector2(0, 60)
+	header.custom_minimum_size = Vector2(0, 58)
+	header.add_theme_constant_override("separation", 10)
+	var captain_portrait := TextureRect.new()
+	captain_portrait.name = "CaptainPortrait"
+	captain_portrait.texture = load("res://assets/ui/captain_portrait_reference.png") as Texture2D
+	captain_portrait.custom_minimum_size = Vector2(54, 54)
+	captain_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	captain_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	header.add_child(captain_portrait)
 	var title := Label.new()
-	title.text = "UNCHARTED TIDES  /  HOME PORT"
-	title.add_theme_font_size_override("font_size", 27)
+	title.text = "⚓  HOME PORT"
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color("#ffe1a0"))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 	_resource_line = Label.new()
-	_resource_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_resource_line.add_theme_font_size_override("font_size", 19)
-	header.add_child(_resource_line)
-	var menu_button := _make_button("Main Menu", 148)
+	_resource_line.name = "PersistentResourceBadges"
+	_resource_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_resource_line.add_theme_font_size_override("font_size", 17)
+	_resource_line.add_theme_color_override("font_color", Color("#f7e8c4"))
+	_resource_line.custom_minimum_size.x = 620
+	var resource_frame := PanelContainer.new()
+	resource_frame.add_theme_stylebox_override("panel", _frame_style(Color("#19354a"), Color("#d9b45f"), 7, 7))
+	resource_frame.add_child(_resource_line)
+	header.add_child(resource_frame)
+	var menu_button := _make_button("Main Menu", 142)
 	menu_button.pressed.connect(_return_to_main_menu)
 	header.add_child(menu_button)
 	layout.add_child(header)
 
 	var status_panel := PanelContainer.new()
-	status_panel.custom_minimum_size = Vector2(0, 46)
+	status_panel.custom_minimum_size = Vector2(0, 42)
+	status_panel.add_theme_stylebox_override("panel", _frame_style(Color(0.06, 0.16, 0.21, 0.90), Color("#a98644"), 6, 6))
 	_status = Label.new()
 	_status.text = "Safe harbor. Bank loot, refit, stock provisions, or choose a voyage."
-	_status.add_theme_font_size_override("font_size", 17)
+	_status.add_theme_font_size_override("font_size", 16)
+	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_panel.add_child(_status)
 	layout.add_child(status_panel)
+	layout.add_child(_build_hero_panel())
 
 	var content_panel := PanelContainer.new()
 	content_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var content_style := StyleBoxFlat.new()
-	content_style.bg_color = Color("#1b252e")
-	content_style.border_color = Color("#46525d")
-	content_style.set_border_width_all(1)
-	content_style.set_corner_radius_all(8)
+	content_style.bg_color = Color(0.07, 0.16, 0.22, 0.84)
+	content_style.border_color = Color("#d0a84e")
+	content_style.set_border_width_all(2)
+	content_style.set_corner_radius_all(10)
 	content_style.content_margin_left = 16
 	content_style.content_margin_right = 16
-	content_style.content_margin_top = 12
-	content_style.content_margin_bottom = 12
+	content_style.content_margin_top = 10
+	content_style.content_margin_bottom = 10
 	content_panel.add_theme_stylebox_override("panel", content_style)
 	layout.add_child(content_panel)
 	var scroll := ScrollContainer.new()
@@ -99,34 +125,176 @@ func _build_layout() -> void:
 	_content.add_theme_constant_override("separation", 12)
 	scroll.add_child(_content)
 
-	var nav := HBoxContainer.new()
-	nav.add_theme_constant_override("separation", 10)
-	for tab in ["Bank", "Shipyard", "Market", "Chart Table", "Bounty Board", "Crew Roster"]:
-		var button := _make_button(tab, 0)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.custom_minimum_size.y = 62
-		button.pressed.connect(_select_tab.bind(tab))
-		_tab_buttons[tab] = button
-		var button_ref: WeakRef = weakref(button)
-		var icon_id: String = str(TAB_ICONS[tab])
-		AssetManager.request_texture(icon_id, func(texture: Texture2D):
-			var target_button := button_ref.get_ref() as Button
-			if target_button != null and texture != null:
-				target_button.icon = texture
-				target_button.expand_icon = true
-		)
-		nav.add_child(button)
-	layout.add_child(nav)
+	var main_nav := HBoxContainer.new()
+	main_nav.name = "PrimaryPortNavigation"
+	main_nav.add_theme_constant_override("separation", 9)
+	for tab in ["Bank", "Shipyard", "Market", "Chart Table"]:
+		_add_tab_button(main_nav, tab, 64)
+	layout.add_child(main_nav)
+	var extra_nav := HBoxContainer.new()
+	extra_nav.name = "SecondaryPortNavigation"
+	extra_nav.add_theme_constant_override("separation", 9)
+	for tab in ["Bounty Board", "Crew Roster"]:
+		_add_tab_button(extra_nav, tab, 48)
+	layout.add_child(extra_nav)
 	_refresh_resource_line()
+
+func _build_hero_panel() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.name = "HarborHeroBanner"
+	panel.custom_minimum_size = Vector2(0, 122)
+	panel.add_theme_stylebox_override("panel", _frame_style(Color("#17344a"), Color("#e0bd6c"), 9, 6))
+	var root := Control.new()
+	root.custom_minimum_size = Vector2(0, 116)
+	panel.add_child(root)
+	var art := TextureRect.new()
+	art.name = "HarborReferenceArt"
+	art.texture = load("res://assets/ui/harbor_scene_strip.png") as Texture2D
+	art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_SCALE
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(art)
+	var tint := ColorRect.new()
+	tint.color = Color(0.03, 0.12, 0.17, 0.34)
+	tint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tint.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(tint)
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for edge in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + edge, 8)
+	root.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	margin.add_child(row)
+
+	var current_ship := HBoxContainer.new()
+	current_ship.name = "CurrentShipCard"
+	current_ship.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	current_ship.add_theme_constant_override("separation", 10)
+	row.add_child(current_ship)
+	var ship_icon := TextureRect.new()
+	ship_icon.name = "CurrentShipPortrait"
+	ship_icon.custom_minimum_size = Vector2(94, 92)
+	ship_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ship_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	current_ship.add_child(ship_icon)
+	var active_ship_id := PlayerData.active_ship_id
+	var ship_icon_id: String = str(SHIP_ICONS.get(active_ship_id, "sloop_icon"))
+	var ship_icon_ref: WeakRef = weakref(ship_icon)
+	AssetManager.request_texture(ship_icon_id, func(texture: Texture2D):
+		var target_icon := ship_icon_ref.get_ref() as TextureRect
+		if target_icon != null and texture != null:
+			target_icon.texture = texture
+	)
+	var ship_copy := VBoxContainer.new()
+	ship_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ship_copy.alignment = BoxContainer.ALIGNMENT_CENTER
+	current_ship.add_child(ship_copy)
+	ship_copy.add_child(_subheading("CURRENT SHIP"))
+	_ship_summary = Label.new()
+	_ship_summary.name = "CurrentShipSummary"
+	_ship_summary.add_theme_font_size_override("font_size", 15)
+	_ship_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ship_copy.add_child(_ship_summary)
+
+	var separator := VSeparator.new()
+	row.add_child(separator)
+	var voyage_card := VBoxContainer.new()
+	voyage_card.name = "VoyageSummaryCard"
+	voyage_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	voyage_card.alignment = BoxContainer.ALIGNMENT_CENTER
+	voyage_card.add_theme_constant_override("separation", 3)
+	row.add_child(voyage_card)
+	voyage_card.add_child(_subheading("VOYAGE SUMMARY"))
+	_voyage_summary = Label.new()
+	_voyage_summary.name = "VoyageSummaryText"
+	_voyage_summary.add_theme_font_size_override("font_size", 14)
+	_voyage_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_voyage_summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	voyage_card.add_child(_voyage_summary)
+	_hero_action = _make_button("Plan Voyage", 168)
+	_hero_action.custom_minimum_size.y = 48
+	_hero_action.pressed.connect(_on_hero_action_pressed)
+	voyage_card.add_child(_hero_action)
+	_refresh_hero_summary()
+	return panel
+
+func _refresh_hero_summary() -> void:
+	if is_instance_valid(_ship_summary):
+		var specs: Dictionary = Constants.SHIPS.get(PlayerData.active_ship_id, {})
+		var ship_name: String = str(specs.get("name", "Ship"))
+		var base_hull: int = int(specs.get("max_hp", 100))
+		var cargo_slots: int = int(specs.get("cargo_slots", 8))
+		_ship_summary.text = "%s  ·  Fleet Tier %d\nBase hull %d HP  ·  %d cargo slots" % [ship_name, _active_ship_tier(), base_hull, cargo_slots]
+	if is_instance_valid(_voyage_summary):
+		var chart_size: int = int(Constants.CHART_SIZE_BY_TIER.get(_selected_tier, 10))
+		var risk: String = ["", "Low", "Moderate", "High", "Extreme"][clampi(_selected_tier, 1, 4)]
+		_voyage_summary.text = "Tier %d  ·  %d × %d chart  ·  %s risk\nSafe return guarantees provision cost + 25%% Gold." % [_selected_tier, chart_size, chart_size, risk]
+	if is_instance_valid(_hero_action):
+		_hero_action.text = "Resume Voyage" if PlayerData.voyage.is_active else "Plan Voyage"
+
+func _on_hero_action_pressed() -> void:
+	if PlayerData.voyage.is_active:
+		get_tree().change_scene_to_file("res://scenes/open_sea.tscn")
+	else:
+		_select_tab("Chart Table")
+
+func _add_tab_button(parent: HBoxContainer, tab: String, height: float) -> void:
+	var button := _make_button(tab, 0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.custom_minimum_size.y = height
+	button.pressed.connect(_select_tab.bind(tab))
+	_tab_buttons[tab] = button
+	var button_ref: WeakRef = weakref(button)
+	var icon_id: String = str(TAB_ICONS[tab])
+	AssetManager.request_texture(icon_id, func(texture: Texture2D):
+		var target_button := button_ref.get_ref() as Button
+		if target_button != null and texture != null:
+			target_button.icon = texture
+			target_button.expand_icon = true
+	)
+	parent.add_child(button)
 
 func _make_button(label: String, min_width: float = 0.0) -> Button:
 	var button := Button.new()
 	button.name = label.replace(" ", "").replace("—", "") + "Button"
 	button.text = label
-	button.custom_minimum_size = Vector2(min_width, 54)
-	button.add_theme_font_size_override("font_size", 17)
+	button.custom_minimum_size = Vector2(min_width, 56)
+	button.add_theme_font_size_override("font_size", 16)
 	button.focus_mode = Control.FOCUS_ALL
+	_apply_button_style(button, false)
 	return button
+
+func _frame_style(fill: Color, border: Color, radius: int = 9, shadow: int = 0) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(radius)
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.30)
+	style.shadow_size = shadow
+	style.content_margin_left = 10.0
+	style.content_margin_right = 10.0
+	style.content_margin_top = 6.0
+	style.content_margin_bottom = 6.0
+	return style
+
+func _apply_button_style(button: Button, selected: bool) -> void:
+	var normal := _frame_style(Color("#17344a") if not selected else Color("#785a28"), Color("#b38d42") if not selected else Color("#ffe09a"), 8, 2 if selected else 0)
+	var hover := _frame_style(Color("#28516a") if not selected else Color("#987433"), Color("#f5d47e"), 8, 5)
+	var pressed := _frame_style(Color("#102838") if not selected else Color("#62491f"), Color("#ffe09a"), 8, 1)
+	var disabled := _frame_style(Color("#29343b"), Color("#606466"), 8, 0)
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("focus", hover)
+	button.add_theme_stylebox_override("disabled", disabled)
+	button.add_theme_color_override("font_color", Color("#f5e9ca"))
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	button.add_theme_color_override("font_pressed_color", Color.WHITE)
+	button.add_theme_color_override("font_disabled_color", Color("#a6a6a2"))
 
 func _return_to_main_menu() -> void:
 	if _transitioning:
@@ -165,10 +333,12 @@ func _on_settings_changed() -> void:
 
 func _refresh_resource_line() -> void:
 	if is_instance_valid(_resource_line):
-		_resource_line.text = "Gold %d    Doubloons %d    Sailing Lv %d" % [PlayerData.gold, PlayerData.doubloons, PlayerData.get_level("Sailing")]
+		_resource_line.text = "Gold  %d     Doubloons  %d     Oak  %d     Cannonballs  %d     Repairs  %d" % [PlayerData.gold, PlayerData.doubloons, int(PlayerData.bank.get("oak_plank", 0)), int(PlayerData.bank.get("cannonball", 0)), int(PlayerData.bank.get("repair_plank", 0))]
+	_refresh_hero_summary()
 	for tab in _tab_buttons:
 		var button: Button = _tab_buttons[tab]
-		button.modulate = Color("#f2d58a") if tab == _selected_tab else Color.WHITE
+		_apply_button_style(button, tab == _selected_tab)
+		button.modulate = Color.WHITE
 
 func _render_tab() -> void:
 	if not is_instance_valid(_content):

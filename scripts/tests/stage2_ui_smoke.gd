@@ -150,6 +150,23 @@ func _run() -> void:
 	_check(str(home.get("_selected_tab")) == "Chart Table", "Start Voyage opens Chart Table tab")
 	for tab_text in ["Bank", "Shipyard", "Market", "Chart Table", "Bounty Board", "Crew Roster"]:
 		_check(_find_button(home, tab_text) != null, "Home Port tab exists: " + tab_text)
+	var captain_portrait := home.find_child("CaptainPortrait", true, false) as TextureRect
+	var primary_nav := home.find_child("PrimaryPortNavigation", true, false) as HBoxContainer
+	var secondary_nav := home.find_child("SecondaryPortNavigation", true, false) as HBoxContainer
+	var port_resources := home.find_child("PersistentResourceBadges", true, false) as Label
+	var harbor_art := home.find_child("HarborReferenceArt", true, false) as TextureRect
+	var ship_summary := home.find_child("CurrentShipSummary", true, false) as Label
+	var voyage_summary := home.find_child("VoyageSummaryText", true, false) as Label
+	_check(captain_portrait != null and captain_portrait.texture != null, "Home Port displays the locally cropped captain portrait")
+	_check(primary_nav != null and primary_nav.get_child_count() == 4 and secondary_nav != null and secondary_nav.get_child_count() == 2, "Home Port gives its four core destinations primary navigation and preserves two secondary boards")
+	_check(port_resources != null and port_resources.text.contains("Gold") and port_resources.text.contains("Cannonballs") and port_resources.text.contains("Repairs"), "Home Port keeps essential resource counts visible across tabs")
+	_check(harbor_art != null and harbor_art.texture != null, "Home Port uses the supplied panoramic harbor art crop")
+	_check(ship_summary != null and ship_summary.text.contains("Sloop") and voyage_summary != null and voyage_summary.text.contains("Tier 1") and voyage_summary.text.contains("10 × 10"), "Home Port hero displays live active-ship and chart summaries")
+	var plan_voyage_button := _find_button(home, "Plan Voyage")
+	if plan_voyage_button != null:
+		plan_voyage_button.pressed.emit()
+	await process_frame
+	_check(str(home.get("_selected_tab")) == "Chart Table", "Home Port Plan Voyage shortcut opens the shared Chart Table panel")
 	var bounty_button := _find_button(home, "Bounty Board")
 	if bounty_button != null:
 		bounty_button.pressed.emit()

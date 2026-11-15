@@ -2,12 +2,12 @@
 
 ## Current milestone
 
-Unified v1.0.0 baseline on `main`, fast-forwarded from user-tested Stage 8 commit `0296d7a` (branch `feature/stage8-release-polish`). The current follow-up fixes Open Sea sea-event choice rendering and improves chart-first mobile navigation, touch inspection, and use of supplied local item/ship thumbnails. The user tested the v1.0.0 Stage 8 build on an Android phone in Godot and reported it working cleanly; this follow-up still needs the user's device verification. Android APK builds remain manual-only (`workflow_dispatch`); no APK build was triggered.
+Unified v1.0.0 baseline on `main`, fast-forwarded from user-tested Stage 8 commit `0296d7a` (branch `feature/stage8-release-polish`). The current follow-up fixes Open Sea sea-event choice rendering, improves chart-first mobile navigation and touch inspection, and rebuilds the Home Port presentation with user-provided harbor art, live ship/voyage hero cards, blue-and-gold frames, and a shared tab panel. The user tested the v1.0.0 Stage 8 build on an Android phone in Godot and reported it working cleanly; these follow-up changes still need device verification. Android APK builds remain manual-only (`workflow_dispatch`); no APK build was triggered.
 
 ## Scenes
 
 - `scenes/main_menu.tscn` — Main Menu, persisted Settings, Captain selection, Journal, first-voyage briefing, replay action, and two-step save reset.
-- `scenes/home_port.tscn` — Bank, Shipyard, Market, Chart Table, Bounty Board, Crew Roster, equipment crafting, and voyage selection.
+- `scenes/home_port.tscn` — reusable, scrollable Bank, Shipyard, Market, Chart Table, Bounty Board, and Crew Roster panels; large primary navigation, persistent resource badges, a user-art harbor banner, live ship/voyage summary cards, and custom drawn harbor backdrop.
 - `scenes/open_sea.tscn` — Chart-first responsive landscape view, tier-scaled cells, movement/exploration, enemy targeting, field repairs, emergency rations, boss encounters, tactical badges/event feed, long-press tile details, supplied local item/ship thumbnails, and extraction.
 - `scenes/main_debug.tscn` — legacy development harness.
 
@@ -44,7 +44,8 @@ Unified v1.0.0 baseline on `main`, fast-forwarded from user-tested Stage 8 commi
 - Stage 7: hireable crew, maritime events, Sailing mastery, Fleet Prestige, and touch polish.
 - Stage 8: first-voyage onboarding/replay, confirmed save reset, Stage 1–7 migration hardening, landscape-responsive scrollable modals, and progression/economy balance pass.
 - Open Sea UI follow-up: fixed explicitly typed sea-event choices; enlarged the centered chart to fit the viewport; added a scrollable voyage-information overlay and touch-and-hold risk/reward descriptions. Loot, site, and ship inspection panels use supplied local JPEGs where a fitting image exists; hazard tiles keep symbolic markers because no reef/mine/obstacle artwork is included.
+- Home Port UI follow-up: established a consistent nautical blue-and-gold frame system, four large primary tab targets plus two secondary boards, persistent core resource counts, a current-ship status card, a live chart/profit summary with a Plan Voyage shortcut, a scenic crop from the user-provided harbor concept, a custom vector-drawn harbor scene, and a cropped Captain portrait. Original reference screenshots, notes, asset manifest, and design PDF are archived under `docs/ui-references/`.
 
 ## Final verification and release
 
-Stage 8 final verification passed on commit `0296d7a`: Godot 4.7.2 headless editor parse plus the contract, mechanics, and UI smoke suites. User-reported Android phone testing also passed. These checks do not replace future landscape/touch/lifecycle testing. Keep the Android workflow manual-only; no APK compilation has been triggered.
+Stage 8 final verification passed on commit `0296d7a`: Godot 4.7.2 headless editor parse plus the contract, mechanics, and UI smoke suites. The current Home Port/Open Sea follow-up also passed the Godot 4.7.2 editor import/parse and all three smoke suites; a 1280×720 rendered Home Port preview was inspected. User-reported Android phone testing covers Stage 8 only, so the follow-up still needs device verification. Keep the Android workflow manual-only; no APK compilation has been triggered.

@@ -1,0 +1,177 @@
+{
+    "game_title": "Uncharted Tides",
+    "engine": "Godot 4.7.2",
+    "assets": [
+        {
+            "file_name": "copper_ore.png",
+            "display_name": "Copper Ore",
+            "category": "Resources & Materials",
+            "dimensions": "32x32 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/items/copper_ore.png",
+            "context": "Basic minable resource deposited into the bank or traded."
+        },
+        {
+            "file_name": "iron_bar.png",
+            "display_name": "Iron Bar",
+            "category": "Resources & Materials",
+            "dimensions": "32x32 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/items/iron_bar.png",
+            "context": "Refined metal bar used as an upgrade material for the Oak Brigantine."
+        },
+        {
+            "file_name": "oak_plank.png",
+            "display_name": "Oak Plank",
+            "category": "Resources & Materials",
+            "dimensions": "32x32 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/items/oak_plank.png",
+            "context": "Processed timber used for ship construction and upgrading to Oak Brigantine."
+        },
+        {
+            "file_name": "mahogany_plank.png",
+            "display_name": "Mahogany Plank",
+            "category": "Resources & Materials",
+            "dimensions": "32x32 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/items/mahogany_plank.png",
+            "context": "Sturdy timber required for the Mahogany Galleon upgrade."
+        },
+        {
+            "file_name": "magic_plank.png",
+            "display_name": "Magic Plank",
+            "category": "Resources & Materials",
+            "dimensions": "32x32 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/items/magic_plank.png",
+            "context": "Magical wood required for the endgame Dragonwood Man-o'-War."
+        },
+        {
+            "file_name": "runite_bar.png",
+            "display_name": "Runite Bar",
+            "category": "Resources & Materials",
+            "dimensions": "32x32 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/items/runite_bar.png",
+            "context": "High-tier metal bar used in top-tier vessel manufacturing."
+        },
+        {
+            "file_name": "repair_plank.png",
+            "display_name": "Repair Plank",
+            "category": "Consumables & Provisions",
+            "dimensions": "32x32 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/items/repair_plank.png",
+            "context": "Purchased at the Market or provisioned to repair ship hull damage during voyages."
+        },
+        {
+            "file_name": "cannonball.png",
+            "display_name": "Cannonball",
+            "category": "Consumables & Provisions",
+            "dimensions": "32x32 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/items/cannonball.png",
+            "context": "Ammunition loaded into broadside cannons for naval combat encounters."
+        },
+        {
+            "file_name": "raw_sea_bass.png",
+            "display_name": "Raw Sea Bass (Bait)",
+            "category": "Consumables & Provisions",
+            "dimensions": "32x32 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/items/raw_sea_bass.png",
+            "context": "Bait or catch item used in maritime gathering loops."
+        },
+        {
+            "file_name": "gold_coin.png",
+            "display_name": "Gold Coins (Stack)",
+            "category": "Currencies",
+            "dimensions": "32x32 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/items/gold_coin.png",
+            "context": "Primary currency used in the Market and Shipyard for purchasing upgrades and goods."
+        },
+        {
+            "file_name": "doubloon.png",
+            "display_name": "Doubloon (Single)",
+            "category": "Currencies",
+            "dimensions": "32x32 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/items/doubloon.png",
+            "context": "Rare secondary currency earned through high-tier voyages and bounties."
+        },
+        {
+            "file_name": "sloop_icon.png",
+            "display_name": "Wooden Sloop",
+            "category": "Ship Portraits",
+            "dimensions": "128x128 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/ships/sloop_icon.png",
+            "context": "Starter vessel icon displayed in the Shipyard (8 cargo slots, 100 HP)."
+        },
+        {
+            "file_name": "brigantine_icon.png",
+            "display_name": "Oak Brigantine",
+            "category": "Ship Portraits",
+            "dimensions": "128x128 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/ships/brigantine_icon.png",
+            "context": "Tier 2 vessel icon displayed in the Shipyard (16 cargo slots, 250 HP)."
+        },
+        {
+            "file_name": "galleon_icon.png",
+            "display_name": "Mahogany Galleon",
+            "category": "Ship Portraits",
+            "dimensions": "128x128 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/ships/galleon_icon.png",
+            "context": "Tier 3 vessel icon displayed in the Shipyard (28 cargo slots, 500 HP)."
+        },
+        {
+            "file_name": "manowar_icon.png",
+            "display_name": "Dragonwood Man-o'-War",
+            "category": "Ship Portraits",
+            "dimensions": "128x128 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/ships/manowar_icon.png",
+            "context": "Endgame vessel icon displayed in the Shipyard (40 cargo slots, 900 HP)."
+        },
+        {
+            "file_name": "icon_bank.png",
+            "display_name": "Bank Tab Glyph",
+            "category": "UI Navigation Glyphs",
+            "dimensions": "48x48 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/ui/icon_bank.png",
+            "context": "Bottom navigation icon for opening the permanent Bank storage interface."
+        },
+        {
+            "file_name": "icon_shipyard.png",
+            "display_name": "Shipyard Tab Glyph",
+            "category": "UI Navigation Glyphs",
+            "dimensions": "48x48 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/ui/icon_shipyard.png",
+            "context": "Bottom navigation icon for opening the Shipyard vessel upgrade interface."
+        },
+        {
+            "file_name": "icon_market.png",
+            "display_name": "Market Tab Glyph",
+            "category": "UI Navigation Glyphs",
+            "dimensions": "48x48 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/ui/icon_market.png",
+            "context": "Bottom navigation icon for accessing the supply shop and store."
+        },
+        {
+            "file_name": "icon_chart.png",
+            "display_name": "Chart Table Tab Glyph",
+            "category": "UI Navigation Glyphs",
+            "dimensions": "48x48 px",
+            "format": "PNG (Transparent)",
+            "path": "res://assets/sprites/ui/icon_chart.png",
+            "context": "Bottom navigation icon for selecting voyage tiers and setting sail."
+        }
+    ]
+}
