@@ -2,13 +2,13 @@
 
 ## Current milestone
 
-Unified v1.0.0 baseline on `main`, fast-forwarded from user-tested Stage 8 commit `0296d7a` (branch `feature/stage8-release-polish`). Includes the first-voyage Captain's Briefing, separate Settings replay/dismissal state, confirmed save reset, migration hardening, tier-scaled Sailing XP and site rewards, and responsive scrollable Main Menu modals. The user tested the merged Stage 8 build on an Android phone in Godot and reported it working cleanly. Android APK builds remain manual-only (`workflow_dispatch`); no APK build was triggered.
+Unified v1.0.0 baseline on `main`, fast-forwarded from user-tested Stage 8 commit `0296d7a` (branch `feature/stage8-release-polish`). The current follow-up fixes Open Sea sea-event choice rendering and improves chart-first mobile navigation, touch inspection, and use of supplied local item/ship thumbnails. The user tested the v1.0.0 Stage 8 build on an Android phone in Godot and reported it working cleanly; this follow-up still needs the user's device verification. Android APK builds remain manual-only (`workflow_dispatch`); no APK build was triggered.
 
 ## Scenes
 
 - `scenes/main_menu.tscn` — Main Menu, persisted Settings, Captain selection, Journal, first-voyage briefing, replay action, and two-step save reset.
 - `scenes/home_port.tscn` — Bank, Shipyard, Market, Chart Table, Bounty Board, Crew Roster, equipment crafting, and voyage selection.
-- `scenes/open_sea.tscn` — Tier-scaled chart, movement/exploration, enemy targeting, field repairs, emergency rations, boss encounters, tactical badges/event feed, and extraction.
+- `scenes/open_sea.tscn` — Chart-first responsive landscape view, tier-scaled cells, movement/exploration, enemy targeting, field repairs, emergency rations, boss encounters, tactical badges/event feed, long-press tile details, supplied local item/ship thumbnails, and extraction.
 - `scenes/main_debug.tscn` — legacy development harness.
 
 ## Autoloads (`project.godot`)
@@ -43,6 +43,7 @@ Unified v1.0.0 baseline on `main`, fast-forwarded from user-tested Stage 8 commi
 - Stage 6: persistent Harbor Bounties, procedural audio and saved volume sliders, tactical HUD/event feed, and manual-only Android workflow.
 - Stage 7: hireable crew, maritime events, Sailing mastery, Fleet Prestige, and touch polish.
 - Stage 8: first-voyage onboarding/replay, confirmed save reset, Stage 1–7 migration hardening, landscape-responsive scrollable modals, and progression/economy balance pass.
+- Open Sea UI follow-up: fixed explicitly typed sea-event choices; enlarged the centered chart to fit the viewport; added a scrollable voyage-information overlay and touch-and-hold risk/reward descriptions. Loot, site, and ship inspection panels use supplied local JPEGs where a fitting image exists; hazard tiles keep symbolic markers because no reef/mine/obstacle artwork is included.
 
 ## Final verification and release
 

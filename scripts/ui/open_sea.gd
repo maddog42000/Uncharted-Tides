@@ -20,6 +20,13 @@ var _repair_button: Button
 var _ration_button: Button
 var _event_box: VBoxContainer
 var _supply_label: Label
+var _details_panel: PanelContainer
+var _inspect_panel: PanelContainer
+var _inspect_icon: TextureRect
+var _inspect_label: Label
+var _long_press_timer: Timer
+var _pressed_tile: Vector2i = Vector2i(-1, -1)
+var _long_press_consumed: bool = false
 var _combat_mode: bool = false
 var _message: String = ""
 var _transitioning: bool = false
@@ -39,49 +46,113 @@ func _ready() -> void:
 func _build_screen() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg := ColorRect.new()
-	bg.color = Color("#101820")
+	bg.color = Color("#0b1720")
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	for edge in ["left", "right"]:
-		margin.add_theme_constant_override("margin_" + edge, 24)
-	for edge in ["top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + edge, 18)
+	for edge in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + edge, 10)
 	add_child(margin)
 	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 10)
+	layout.add_theme_constant_override("separation", 7)
 	margin.add_child(layout)
 	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 12)
 	var title := Label.new()
-	title.text = "OPEN SEA  /  TIER %d" % PlayerData.voyage.tier
-	title.add_theme_font_size_override("font_size", 28)
+	title.text = "OPEN SEA  ·  TIER %d" % PlayerData.voyage.tier
+	title.add_theme_font_size_override("font_size", 23)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
-	_position_label = _label("Position: —", 18)
+	_position_label = _label("Position: —", 16)
 	header.add_child(_position_label)
+	var details_button := Button.new()
+	details_button.text = "Voyage Info"
+	details_button.custom_minimum_size = Vector2(122, 48)
+	details_button.pressed.connect(_toggle_details)
+	header.add_child(details_button)
 	layout.add_child(header)
-	var content := HBoxContainer.new()
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", 22)
-	layout.add_child(content)
+	_status_label = _label("", 15)
+	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status_label.custom_minimum_size.y = 32
+	layout.add_child(_status_label)
 	var chart_panel := PanelContainer.new()
-	chart_panel.custom_minimum_size = Vector2(510, 0)
-	content.add_child(chart_panel)
+	chart_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chart_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	chart_panel.add_theme_stylebox_override("panel", _panel_style(Color("#142632"), Color("#39515e")))
+	layout.add_child(chart_panel)
 	var chart_box := VBoxContainer.new()
-	chart_box.add_theme_constant_override("separation", 7)
+	chart_box.add_theme_constant_override("separation", 4)
 	chart_panel.add_child(chart_box)
-	chart_box.add_child(_label("CHART  ·  tap any highlighted destination", 16))
+	var chart_title := _label("CHART  ·  tap a reachable tile to sail  ·  hold a tile for details", 15)
+	chart_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	chart_box.add_child(chart_title)
+	var board_center := CenterContainer.new()
+	board_center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	board_center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	chart_box.add_child(board_center)
 	_grid = GridContainer.new()
 	_grid.columns = PlayerData.voyage.chart_size
-	_grid.add_theme_constant_override("h_separation", 3)
-	_grid.add_theme_constant_override("v_separation", 3)
-	chart_box.add_child(_grid)
-	chart_box.add_child(_label("S Ship  ! Reef  M Mine  O Obstacle  C Salvage  I Island  W Wreck  X Extraction", 14))
+	_grid.add_theme_constant_override("h_separation", 2)
+	_grid.add_theme_constant_override("v_separation", 2)
+	_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	board_center.add_child(_grid)
+	var legend := _label("S Ship  ·  ! Reef  ·  M Mine  ·  O Obstacle  ·  C Salvage  ·  I Island  ·  W Wreck  ·  X Harbor  ·  E Event", 13)
+	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	legend.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	chart_box.add_child(legend)
+	var commands := HBoxContainer.new()
+	commands.add_theme_constant_override("separation", 7)
+	commands.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout.add_child(commands)
+	_explore_button = Button.new()
+	_explore_button.custom_minimum_size = Vector2(0, 54)
+	_explore_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_explore_button.pressed.connect(_on_explore_pressed)
+	commands.add_child(_explore_button)
+	_combat_button = Button.new()
+	_combat_button.custom_minimum_size = Vector2(0, 54)
+	_combat_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_combat_button.pressed.connect(_on_combat_mode_pressed)
+	commands.add_child(_combat_button)
+	_repair_button = Button.new()
+	_repair_button.custom_minimum_size = Vector2(0, 54)
+	_repair_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_repair_button.pressed.connect(_on_field_repair_pressed)
+	commands.add_child(_repair_button)
+	_ration_button = Button.new()
+	_ration_button.custom_minimum_size = Vector2(0, 54)
+	_ration_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ration_button.pressed.connect(_on_ration_pressed)
+	commands.add_child(_ration_button)
+	_details_panel = PanelContainer.new()
+	_details_panel.name = "VoyageDetailsOverlay"
+	_details_panel.set_anchors_preset(Control.PRESET_CENTER)
+	var viewport_size: Vector2 = get_viewport_rect().size
+	_details_panel.custom_minimum_size = Vector2(minf(760.0, viewport_size.x - 28.0), minf(620.0, viewport_size.y - 28.0))
+	_details_panel.position = -_details_panel.custom_minimum_size * 0.5
+	_details_panel.visible = false
+	_details_panel.z_index = 10
+	_details_panel.add_theme_stylebox_override("panel", _panel_style(Color("#12232d"), Color("#7d9aa5")))
+	add_child(_details_panel)
+	var details_root := VBoxContainer.new()
+	details_root.add_theme_constant_override("separation", 8)
+	_details_panel.add_child(details_root)
+	var details_header := HBoxContainer.new()
+	var details_title := _label("VOYAGE STATUS & LOG", 20)
+	details_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	details_header.add_child(details_title)
+	var close_details := Button.new()
+	close_details.text = "Close"
+	close_details.custom_minimum_size = Vector2(100, 48)
+	close_details.pressed.connect(_toggle_details)
+	details_header.add_child(close_details)
+	details_root.add_child(details_header)
 	var details_scroll := ScrollContainer.new()
 	details_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	details_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(details_scroll)
+	details_root.add_child(details_scroll)
 	var details := VBoxContainer.new()
 	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	details.add_theme_constant_override("separation", 8)
@@ -114,33 +185,65 @@ func _build_screen() -> void:
 	_site_label = _label("No exploration site under the ship.", 16)
 	_site_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	details.add_child(_site_label)
-	_explore_button = Button.new()
-	_explore_button.custom_minimum_size = Vector2(0, 58)
-	_explore_button.pressed.connect(_on_explore_pressed)
-	details.add_child(_explore_button)
-	_combat_button = Button.new()
-	_combat_button.custom_minimum_size = Vector2(0, 58)
-	_combat_button.pressed.connect(_on_combat_mode_pressed)
-	details.add_child(_combat_button)
 	_supply_label = _label("Field stores: —", 15)
 	details.add_child(_supply_label)
-	_repair_button = Button.new()
-	_repair_button.custom_minimum_size = Vector2(0, 48)
-	_repair_button.pressed.connect(_on_field_repair_pressed)
-	details.add_child(_repair_button)
-	_ration_button = Button.new()
-	_ration_button.custom_minimum_size = Vector2(0, 48)
-	_ration_button.pressed.connect(_on_ration_pressed)
-	details.add_child(_ration_button)
 	var rules := _label("Tier 3 Sea Monster and Tier 4 Dreadnought Captain bosses drop unique relics. Repair planks restore up to 40 hull; each ration gives +1 range for your next move. Supply actions cost a turn. Safe extraction covers all launch provisions plus 25%.", 15)
 	rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	details.add_child(rules)
 	_event_box = VBoxContainer.new()
 	_event_box.name = "SeaEventChoices"
 	details.add_child(_event_box)
-	_status_label = _label("", 16)
-	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	details.add_child(_status_label)
+	_long_press_timer = Timer.new()
+	_long_press_timer.one_shot = true
+	_long_press_timer.wait_time = 0.55
+	_long_press_timer.timeout.connect(_on_long_press_timeout)
+	add_child(_long_press_timer)
+	_inspect_panel = PanelContainer.new()
+	_inspect_panel.name = "TileInspectionPopup"
+	_inspect_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_inspect_panel.position = Vector2(-190, 60)
+	_inspect_panel.custom_minimum_size = Vector2(380, 170)
+	_inspect_panel.visible = false
+	_inspect_panel.z_index = 20
+	_inspect_panel.add_theme_stylebox_override("panel", _panel_style(Color("#12232d"), Color("#d7bf83")))
+	add_child(_inspect_panel)
+	var inspect_row := HBoxContainer.new()
+	inspect_row.add_theme_constant_override("separation", 12)
+	_inspect_panel.add_child(inspect_row)
+	_inspect_icon = TextureRect.new()
+	_inspect_icon.name = "TileInspectionIcon"
+	_inspect_icon.custom_minimum_size = Vector2(88, 88)
+	_inspect_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_inspect_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	inspect_row.add_child(_inspect_icon)
+	var inspect_column := VBoxContainer.new()
+	inspect_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inspect_row.add_child(inspect_column)
+	_inspect_label = _label("", 16)
+	_inspect_label.name = "TileInspectionText"
+	_inspect_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inspect_column.add_child(_inspect_label)
+	var close_inspect := Button.new()
+	close_inspect.text = "Dismiss"
+	close_inspect.custom_minimum_size = Vector2(0, 44)
+	close_inspect.pressed.connect(func(): _inspect_panel.visible = false)
+	inspect_column.add_child(close_inspect)
+
+func _panel_style(fill: Color, border: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 10.0
+	style.content_margin_right = 10.0
+	style.content_margin_top = 8.0
+	style.content_margin_bottom = 8.0
+	return style
+
+func _toggle_details() -> void:
+	_details_panel.visible = not _details_panel.visible
+	_inspect_panel.visible = false
 
 func _label(text: String, font_size: int) -> Label:
 	var label := Label.new()
@@ -197,6 +300,8 @@ func _render_state() -> void:
 	_ration_button.disabled = voyage.ration_stock <= 0 or voyage.ration_burst_actions > 0 or GameClock.is_clock_paused()
 	_status_label.text = _message
 	_render_event_choices()
+	if voyage.pending_event_index >= 0:
+		_details_panel.visible = true
 	_render_chart()
 	SettingsManager.apply_to_tree(self)
 
@@ -205,7 +310,13 @@ func _render_event_choices() -> void:
 	var event: Dictionary = PlayerData.voyage.current_sea_event()
 	if event.is_empty(): return
 	var kind: String = str(event.type)
-	var options: Array[String] = ["rescue", "salvage", "pass"] if kind == "merchant_distress" else (["ride"] if kind == "tailwind_current" else ["shelter"])
+	var options: Array[String] = []
+	if kind == "merchant_distress":
+		options.append_array(["rescue", "salvage", "pass"])
+	elif kind == "tailwind_current":
+		options.append("ride")
+	else:
+		options.append("shelter")
 	for option in options:
 		var button := Button.new()
 		button.text = option.capitalize()
@@ -219,13 +330,15 @@ func _render_chart() -> void:
 		child.queue_free()
 	var voyage: VoyageState = PlayerData.voyage
 	_grid.columns = voyage.chart_size
+	var viewport_size: Vector2 = get_viewport_rect().size
+	var cell_px: int = clampi(floori(minf((viewport_size.x - 36.0) / float(voyage.chart_size), (viewport_size.y - 184.0) / float(voyage.chart_size))), 20, 64)
 	for y in range(voyage.chart_size):
 		for x in range(voyage.chart_size):
 			var tile := Vector2i(x, y)
 			var button := Button.new()
 			button.name = "Cell_%d_%d" % [x, y]
-			button.custom_minimum_size = Vector2(34, 32) if voyage.chart_size >= 14 else (Vector2(38, 35) if voyage.chart_size == 12 else Vector2(42, 38))
-			button.add_theme_font_size_override("font_size", 14)
+			button.custom_minimum_size = Vector2(cell_px, cell_px)
+			button.add_theme_font_size_override("font_size", clampi(cell_px / 3, 11, 21))
 			var enemy: Dictionary = voyage.enemy_at(tile)
 			var in_range: bool = voyage.can_move_to(tile)
 			var targetable: bool = voyage.can_fire_at(tile)
@@ -235,7 +348,7 @@ func _render_chart() -> void:
 			if not enemy.is_empty():
 				button.text = "B" if bool(enemy.get("boss", false)) else ("P" if str(enemy.get("type", "")).contains("sloop") else "G")
 			button.tooltip_text = "Tile (%d, %d)%s" % [x, y, " · movement available" if in_range else ""]
-			button.disabled = (not targetable if _combat_mode else (not in_range or voyage.pending_event_index >= 0)) or GameClock.is_clock_paused()
+			button.disabled = GameClock.is_clock_paused()
 			if is_current:
 				button.modulate = Color("#f3d48b")
 			elif not enemy.is_empty():
@@ -255,6 +368,8 @@ func _render_chart() -> void:
 			elif in_range:
 				button.modulate = Color("#b8d88f")
 			button.pressed.connect(_on_tile_pressed.bind(tile))
+			button.button_down.connect(_on_tile_hold_started.bind(tile))
+			button.button_up.connect(_on_tile_hold_released)
 			_grid.add_child(button)
 
 func _tile_marker(tile: Vector2i, is_current: bool) -> String:
@@ -288,8 +403,112 @@ func _site_position(site: Dictionary) -> Vector2i:
 	var coordinates: Array = site.get("position", [0, 0])
 	return Vector2i(int(coordinates[0]), int(coordinates[1]))
 
+func _on_tile_hold_started(tile: Vector2i) -> void:
+	_pressed_tile = tile
+	_long_press_consumed = false
+	_long_press_timer.start()
+
+func _on_tile_hold_released() -> void:
+	_long_press_timer.stop()
+
+func _on_long_press_timeout() -> void:
+	if _pressed_tile.x < 0:
+		return
+	_long_press_consumed = true
+	_show_tile_inspection(_pressed_tile)
+
+func _show_tile_inspection(tile: Vector2i) -> void:
+	_inspect_label.text = _tile_inspection_text(tile)
+	_inspect_icon.texture = _local_tile_icon(tile)
+	_inspect_panel.visible = true
+
+func _tile_inspection_text(tile: Vector2i) -> String:
+	var voyage: VoyageState = PlayerData.voyage
+	var intro: String = "Tile (%d, %d)\n" % [tile.x, tile.y]
+	if tile == voyage.ship_position:
+		return intro + "Your %s is here. Hull: %d/%d HP." % [str(Constants.SHIPS.get(voyage.ship_id, {}).get("name", voyage.ship_id)), voyage.current_hull_hp, voyage.max_hull_hp()]
+	var enemy: Dictionary = voyage.enemy_at(tile)
+	if not enemy.is_empty():
+		var enemy_name: String = str(enemy.get("type", "enemy")).replace("_", " ").capitalize()
+		var text: String = "%s\nHull %d/%d · cannon range %d\nDefeat reward: %d Gold" % [enemy_name, int(enemy.get("hull", 0)), int(enemy.get("max_hull", 0)), Constants.COMBAT_RANGE, int(enemy.get("loot_gold", 0))]
+		if bool(enemy.get("boss", false)):
+			text += "\nBoss reward: unique Captain Relic"
+		return intro + text
+	var hazard: Dictionary = voyage.hazard_at(tile)
+	if not hazard.is_empty():
+		var kind: String = str(hazard.get("type", "obstacle")).capitalize()
+		var damage: int = int(hazard.get("damage", 0))
+		return intro + "%s hazard\nCollision damage: %d hull HP%s\nHazards drift every %d actions." % [kind, damage, " (Shipwright reduces this by 20%)" if voyage.captain_background == "shipwright" else "", int(Constants.HAZARD_DRIFT_EVERY_TURNS.get(voyage.tier, 5))]
+	for site in voyage.exploration_sites:
+		if _site_position(site) == tile:
+			var item_id: String = str(site.get("reward_item", ""))
+			var qty: int = int(site.get("reward_qty", 0))
+			var site_name: String = "Island cove" if str(site.get("type", "")) == "island" else "Shipwreck"
+			var value: int = int(Constants.ITEM_SELL_PRICES.get(item_id, 0)) * qty
+			var state_text: String = "Already scavenged" if bool(site.get("completed", false)) else "Anchor for %d action ticks" % int(site.get("required_ticks", 1))
+			return intro + "%s\n%s\nReward: %d %s · estimated sale value %d Gold." % [site_name, state_text, qty, str(Constants.ITEMS.get(item_id, {}).get("name", item_id)), value]
+	if tile == voyage.salvage_position and not voyage.salvage_collected:
+		var qty: int = 3 + (1 if voyage.crew.has("quartermaster") else 0)
+		return intro + "Floating salvage\nRecover %d Copper Ore · estimated sale value %d Gold." % [qty, qty * int(Constants.ITEM_SELL_PRICES.get("copper_ore", 0))]
+	if tile == voyage.extraction_position:
+		return intro + "Safe harbor\nReach this tile to extract and bank your cargo. Guaranteed payout: %d Gold, plus cargo and any bonuses." % voyage.extraction_gold_reward
+	var event_index: int = voyage.event_at(tile)
+	if event_index >= 0:
+		var sea_event: Dictionary = voyage.sea_events[event_index]
+		match str(sea_event.get("type", "")):
+			"merchant_distress":
+				return intro + "Merchant distress signal\nRescue for %d Gold, salvage for %d Copper Ore, or pass." % [150 * voyage.tier, voyage.tier + 1]
+			"tailwind_current":
+				return intro + "Tailwind current\nRide it to gain +1 tile of movement on your next move."
+			"fog_squall":
+				return intro + "Fog squall\nShelter here to reduce enemy aggression for several actions."
+	return intro + ("Reachable open water · movement available." if voyage.can_move_to(tile) else "Open water · outside current movement range.")
+
+func _local_tile_icon(tile: Vector2i) -> Texture2D:
+	var voyage: VoyageState = PlayerData.voyage
+	var asset_id: String = ""
+	var enemy: Dictionary = voyage.enemy_at(tile)
+	if not enemy.is_empty():
+		var enemy_type: String = str(enemy.get("type", ""))
+		if enemy_type.contains("sloop"):
+			asset_id = "sloop_icon"
+		elif enemy_type.contains("galleon"):
+			asset_id = "galleon_icon"
+		elif enemy_type.contains("dreadnought"):
+			asset_id = "manowar_icon"
+	else:
+		for site in voyage.exploration_sites:
+			if _site_position(site) == tile:
+				asset_id = str(site.get("reward_item", ""))
+				break
+		if asset_id.is_empty() and tile == voyage.salvage_position and not voyage.salvage_collected:
+			asset_id = "copper_ore"
+			if asset_id.is_empty() and tile == voyage.extraction_position:
+				asset_id = "icon_chart"
+			if asset_id.is_empty() and tile == voyage.ship_position:
+				asset_id = str({"wooden_sloop": "sloop_icon", "oak_brigantine": "brigantine_icon", "mahogany_galleon": "galleon_icon", "dragonwood_man_owar": "manowar_icon"}.get(voyage.ship_id, "sloop_icon"))
+	var filename: String = str(AssetManager.ASSET_MAPPING.get(asset_id, ""))
+	if filename.is_empty() or not ResourceLoader.exists("res://" + filename):
+		return null
+	return load("res://" + filename) as Texture2D
+
 func _on_tile_pressed(destination: Vector2i) -> void:
+	if _long_press_consumed:
+		_long_press_consumed = false
+		_pressed_tile = Vector2i(-1, -1)
+		return
+	_long_press_timer.stop()
+	_pressed_tile = Vector2i(-1, -1)
 	if GameClock.is_clock_paused() or not PlayerData.voyage.is_active:
+		return
+	_inspect_panel.visible = false
+	if _combat_mode and not PlayerData.voyage.can_fire_at(destination):
+		_message = "Tap a highlighted enemy within cannon range, or turn targeting off."
+		_render_state()
+		return
+	if not _combat_mode and not PlayerData.voyage.can_move_to(destination):
+		_message = "Choose one of the highlighted tiles within movement range. Hold any tile for details."
+		_render_state()
 		return
 	var result: Dictionary = PlayerData.fire_cannons_at(destination) if _combat_mode else PlayerData.move_open_sea_to(destination)
 	if _combat_mode: _combat_mode = false

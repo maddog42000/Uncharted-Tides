@@ -183,6 +183,19 @@ func _run() -> void:
 	var sea: Node = current_scene
 	_check(sea != null and sea.scene_file_path == "res://scenes/open_sea.tscn", "Set Sail transitions to Open Sea")
 	_check(player.voyage.is_active and player.voyage.tier == 1, "Set Sail initializes Tier 1 voyage")
+	var distress_index: int = -1
+	for event_index in range(player.voyage.sea_events.size()):
+		if str(player.voyage.sea_events[event_index].get("type", "")) == "merchant_distress":
+			distress_index = event_index
+			break
+	if distress_index >= 0 and sea != null:
+		player.voyage.pending_event_index = distress_index
+		sea.call("_render_state")
+	var event_choices := sea.find_child("SeaEventChoices", true, false) as VBoxContainer if sea != null else null
+	_check(event_choices != null and event_choices.get_child_count() == 3, "Merchant distress choices render from a typed list without Array assignment errors")
+	if distress_index >= 0 and sea != null:
+		player.voyage.pending_event_index = -1
+		sea.call("_render_state")
 	var tactical_badges := sea.find_child("TacticalBadges", true, false) as Label if sea != null else null
 	var voyage_resources := sea.find_child("VoyageResources", true, false) as Label if sea != null else null
 	_check(tactical_badges != null and tactical_badges.text.contains("Captain perk") and tactical_badges.text.contains("Equipped relics"), "Open Sea HUD displays Captain perk and Relic badges")
@@ -192,6 +205,13 @@ func _run() -> void:
 		quit(1)
 		return
 	_check(_find_cell(sea, 1, 0) != null and not _find_cell(sea, 1, 0).disabled, "Chart exposes adjacent tile as tappable")
+	_check(_find_cell(sea, 1, 0).custom_minimum_size.x >= 48.0, "Tier 1 chart tiles are enlarged for mobile readability")
+	sea.call("_show_tile_inspection", Vector2i(1, 0))
+	var inspection_text := sea.find_child("TileInspectionText", true, false) as Label
+	_check(inspection_text != null and inspection_text.text.contains("Floating salvage") and inspection_text.text.contains("Copper Ore"), "Tile inspection explains salvage contents and estimated value")
+	var icon := sea.find_child("TileInspectionIcon", true, false) as TextureRect
+	_check(icon != null and icon.texture != null, "Tile inspection reuses the supplied Copper Ore image")
+	sea.find_child("TileInspectionPopup", true, false).visible = false
 	game_clock.set_paused(true)
 	await process_frame
 	var paused_position: Vector2i = player.voyage.ship_position
