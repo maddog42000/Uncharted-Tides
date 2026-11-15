@@ -9,6 +9,7 @@ var text_size_index: int = 1
 var reduced_motion: bool = false
 var master_volume: float = 0.8
 var sfx_volume: float = 0.8
+var briefing_seen: bool = false
 
 func _ready() -> void:
 	_load_settings()
@@ -38,6 +39,13 @@ func set_sfx_volume(value: float) -> void:
 	sfx_volume = clampf(value, 0.0, 1.0)
 	_save_settings()
 	apply_audio_volumes()
+	settings_changed.emit()
+
+func set_briefing_seen(seen: bool) -> void:
+	if briefing_seen == seen:
+		return
+	briefing_seen = seen
+	_save_settings()
 	settings_changed.emit()
 
 func apply_audio_volumes() -> void:
@@ -81,6 +89,7 @@ func _load_settings() -> void:
 	reduced_motion = bool(config.get_value("accessibility", "reduced_motion", false))
 	master_volume = clampf(float(config.get_value("audio", "master_volume", 0.8)), 0.0, 1.0)
 	sfx_volume = clampf(float(config.get_value("audio", "sfx_volume", 0.8)), 0.0, 1.0)
+	briefing_seen = bool(config.get_value("onboarding", "briefing_seen", false))
 
 func _save_settings() -> void:
 	var config := ConfigFile.new()
@@ -88,4 +97,5 @@ func _save_settings() -> void:
 	config.set_value("accessibility", "reduced_motion", reduced_motion)
 	config.set_value("audio", "master_volume", master_volume)
 	config.set_value("audio", "sfx_volume", sfx_volume)
+	config.set_value("onboarding", "briefing_seen", briefing_seen)
 	config.save(SETTINGS_PATH)

@@ -1,6 +1,6 @@
-# Uncharted Tides — Stage 5 Fieldcraft, Bosses & Android Build
+# Uncharted Tides — Stage 8 Release Polish
 
-A Godot 4.7.2 mobile-landscape project containing the foundation systems, Main Menu, four-tab Home Port, and playable Open Sea loop. Stage 5 adds tactical use of voyage supplies, Tier 3–4 bosses and passive Captain Relics, an explicit tier-wide extraction guarantee, and GitHub Actions debug APK exports. Stage 5 Android-device verification remains pending.
+A Godot 4.7.2 mobile-landscape project containing the Main Menu, Home Port, and playable Tier 1–4 Open Sea loop. Stage 8 adds first-voyage onboarding, safe save management and migration, responsive modal layouts, and a full progression/economy pass. Stage 8 Android-device verification remains pending.
 
 ## Open and run
 
@@ -11,7 +11,9 @@ The former QA harness remains available at `scenes/main_debug.tscn`; run it as t
 ## Implemented flows
 
 - The Main Menu uses the supplied artwork and transparent hitboxes for **Settings**, **Select Character**, **Journal**, **Navigate**, and **Start Voyage**. The embedded bottom strip is cropped away; no “Begin Your Odyssey” control exists.
-- **Settings** persist Text Size (Small, Standard, Large) and Reduced Motion on the device. Text sizing applies throughout the menu, Home Port, and Open Sea. Reduced Motion skips decorative scene fades.
+- **Settings** persist Text Size (Small, Standard, Large), Reduced Motion, Master/SFX volumes, and whether the Captain's Briefing has been dismissed. Text sizing applies throughout the UI; Reduced Motion skips decorative scene fades.
+- New profiles see a dismissible **Captain's Briefing** covering highlighted movement, provisions and repairs, island/wreck ticks, and extraction profit. Returning profiles are not interrupted; Settings can replay the briefing.
+- **Reset Save Data** uses a separate confirmation step, deletes the live save and recovery copies, and preserves display, audio, and briefing preferences.
 - **Select Character** persists one Captain background, changeable while in port: Merchant earns 10% additional Gold on successful extraction; Navigator gains one movement tile per action; Shipwright reduces hazard hull damage by 20%. Background changes are locked during an active voyage.
 - **Captain's Journal** tracks lifetime voyages started, successful extractions, Gold earned, and cargo brought home. The counters survive save/reload.
 - **Captain Relics** recovered from Tier 3–4 bosses appear in the Journal and persist across saves. The Sea Serpent Scale adds 25 maximum hull; the Dreadnought Insignia adds 5 cannon damage and 10% extraction Gold.
@@ -35,10 +37,11 @@ App suspension/focus loss pauses the simulation and saves voyage state. Movement
 - **Inventory:** Backpack and ship cargo are slot-limited; bank quantities stack by singular `snake_case` IDs. `deposit(item_id, qty)` transfers up to the matching quantity. `withdraw(item_id, qty)` is all-or-nothing and leaves state unchanged if the bank lacks stock or backpack space.
 - **Currencies and journal:** Gold, Doubloons, Captain background, and career counters serialize with player state. Successful extraction increments its reward and cargo totals once, irrespective of cargo stack count.
 - **Ship upgrades:** Require the previous ship, Sailing level, Gold, and materials. All requirements are validated before deductions; upgrades are blocked while a voyage is active and signal state changes for saving.
-- **Voyage provisions and profitability:** Sailing gates are Tier 1/2/3/4 = 1/25/50/75, and the matching ship tier is also required. Chart sizes scale 10/12/14/16. Current provision defaults are Tier 1: 2 repair planks, 10 cannonballs, 3 raw sea bass; Tier 2: 4/20/5; Tier 3: 6/30/8; Tier 4: 10/50/12. The successful-extraction Gold guarantee is calculated from the complete market value of those provisions plus 25%, so it exceeds consumable costs in every tier even if supplies are used mid-voyage. Combat drops, exploration rewards, and relics are additional upside. Automated mechanics checks calculate the provision cost per tier and assert the guarantee exceeds it.
+- **Voyage provisions and profitability:** Sailing gates are Tier 1/2/3/4 = 1/20/40/60, and the matching ship tier is also required. Ship progression: Brigantine 20 Sailing/3,000 Gold/20 Oak Planks/10 Iron Bars; Galleon 40/18,000/40 Mahogany Planks/20 Mithril Bars; Man-o'-War 60/75,000/80 Magic Planks/40 Runite Bars. Current provision defaults are Tier 1: 2 repair planks, 10 cannonballs, 3 raw sea bass; Tier 2: 4/20/5; Tier 3: 6/30/8; Tier 4: 10/50/12. Each successful action grants `400 × tier²` Sailing XP and safe extraction grants another `1,200 × tier`. Extraction Gold remains the full provision-market cost plus 25%; exploration materials and bounty rewards are additional upside.
+- Island and wreck exploration rewards scale by tier: Oak Planks/Iron Bars, Mahogany Planks/Mithril Bars, Magic Planks/Runite Bars, and increased Tier 4 quantities. Mechanics checks compare their configured sale value and each extraction guarantee with provision costs.
 - **Item IDs:** Canonical examples include `copper_ore`, `iron_bar`, `mithril_bar`, `oak_plank`, `mahogany_plank`, `magic_plank`, `runite_bar`, `repair_plank`, `cannonball`, and `raw_sea_bass`.
-- **Save data:** Immediate writes use a verified temporary file and backup recovery. Startup checks the live save, backup, then valid temporary file. Active voyage position, hazard/site states, enemy hulls, ammunition, equipment effects, repair/ration stocks, remaining movement burst, relics, cargo, salvage status, extraction guarantee, Captain background, and career stats persist; legacy saves default to Merchant and zeroed journal counters. Android force-stop survival still depends on whether the OS allows the pause callback to finish.
-- **Settings:** `SettingsManager` stores display and accessibility values in `user://settings.cfg`, separately from voyage/player saves.
+- **Save data:** Immediate writes use a verified temporary file and backup recovery. Stage 1–7 fields are migrated and validated on load, including Crew, Relics, Bounties, Prestige, Journal, inventory, and active voyage data. Reset removes all save/recovery copies but never removes Settings. Android force-stop survival still depends on whether the OS allows the pause callback to finish.
+- **Settings:** `SettingsManager` stores display, accessibility, audio, and onboarding values in `user://settings.cfg`, separately from voyage/player saves.
 - **Clock:** A 0.6-second fixed simulation step with physics-frame accumulation. Frame deltas are capped at 0.25 seconds and excess elapsed time is discarded. This is not a wall-clock timer.
 - **Assets:** Numeric `.jpg` filenames map to public raw GitHub assets; Main Menu and Loading Screen JPEGs are bundled as offline fallbacks. Other icons are fetched/cached under `user://asset_cache`; uncached assets may be unavailable offline, while text controls remain usable.
 
@@ -50,7 +53,7 @@ App suspension/focus loss pauses the simulation and saves voyage state. Movement
 - `scripts/ui/main_menu.gd`: Main Menu controls, Settings, Captain selection, Journal, and transitions.
 - `scripts/ui/home_port.gd`: Bank, Shipyard, Market, and Chart Table.
 - `scripts/ui/open_sea.gd`, `data/voyage_state.gd`: adaptive chart, movement, hazards, exploration, field supplies, boss combat, relic rewards, and extraction.
-- `export_presets.cfg` and `.github/workflows/android-build.yml`: arm64 Android debug export and uploaded GitHub Actions APK artifact; the workflow uses the Godot debug signing key and needs no repo secrets.
+- `export_presets.cfg` and `.github/workflows/android-build.yml`: arm64 Android debug export; the workflow is manual-only (`workflow_dispatch`) and must not be triggered during active development.
 - `scripts/autoloads/SaveManager.gd`: durable player/voyage save and recovery.
 - `scripts/tests/`: contract, mechanics, and UI smoke suites.
 
@@ -64,4 +67,4 @@ godot --headless --path . --script res://scripts/tests/stage2_mechanics_smoke.gd
 godot --headless --path . --script res://scripts/tests/stage2_ui_smoke.gd
 ```
 
-The suites cover project data contracts, bank transactions, ship/equipment upgrades and tier gating; movement, tier chart/enemy scaling, combat, equipment effects and persistence, hazards, exploration, extraction ROI, Captain perks and settings; and Main Menu, Home Port, Open Sea, pause, salvage, extraction, sinking and banking flows. Headless checks do not replace Android touch, layout, network, or force-stop verification.
+The suites cover project data contracts, bank transactions, ship/equipment upgrades and tier gating, malformed/legacy migration and reset isolation; movement, tier chart/enemy/site scaling, combat, equipment effects and persistence, hazards, exploration, extraction ROI, Sailing XP pacing, Captain perks and Settings; and Main Menu, first-run briefing/replay, responsive modals, two-step reset, Home Port, Open Sea, pause, salvage, extraction, sinking and banking flows. Headless checks do not replace Android touch, layout, network, or force-stop verification.

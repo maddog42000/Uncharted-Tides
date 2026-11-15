@@ -92,12 +92,17 @@ func load_game() -> bool:
 	save_completed.emit(true, "Loaded save from %s (tick %d)." % [chosen_path, GameClock.tick_count])
 	return true
 
-func wipe_save() -> void:
+func wipe_save() -> bool:
 	_wiping = true
 	for path in [SAVE_PATH, TEMP_PATH, BACKUP_PATH]:
 		if FileAccess.file_exists(path):
-			DirAccess.remove_absolute(_absolute(path))
+			var remove_error: Error = DirAccess.remove_absolute(_absolute(path))
+			if remove_error != OK:
+				_wiping = false
+				save_completed.emit(false, "Could not remove save file %s: %s" % [path, error_string(remove_error)])
+				return false
 	GameClock.reset_clock()
 	PlayerData.reset_to_defaults()
 	_wiping = false
 	save_completed.emit(true, "Save files removed and state reset.")
+	return true

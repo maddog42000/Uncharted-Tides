@@ -2,50 +2,48 @@
 
 ## Current milestone
 
-Stage 7 branch: `feature/stage7-crew-events-and-release`, based on user-tested Stage 6 commit fd43437 merged to main. Adds hireable crew, maritime chart events, Sailing mastery, Fleet Prestige, and landscape touch polish. Android APK builds are manual-only (`workflow_dispatch`) during active development. Android device verification of this branch remains pending.
+Stage 8 release polish on `feature/stage8-release-polish`, based on user-tested Stage 7 commit `baa337d`, merged into `main`. Adds a first-voyage Captain's Briefing, separate Settings replay/dismissal state, confirmed save reset, migration hardening, tier-scaled Sailing XP and site rewards, and responsive scrollable Main Menu modals. Android APK builds remain manual-only (`workflow_dispatch`); do not trigger during active development. Stage 8 Android device verification is pending.
 
 ## Scenes
 
-- `scenes/main_menu.tscn` — Main Menu, persisted Settings, Captain selection, and Journal with collected Captain Relics and their passive effects.
-- `scenes/home_port.tscn` — Bank, Shipyard, Market, Chart Table, persistent Bounty Board, Crew Roster, equipment crafting, and voyage selection.
-- `scenes/open_sea.tscn` — adaptive grid, movement/exploration, enemy targeting, field repairs, emergency rations, boss encounters, tactical status badges, recent event feed, and extraction.
+- `scenes/main_menu.tscn` — Main Menu, persisted Settings, Captain selection, Journal, first-voyage briefing, replay action, and two-step save reset.
+- `scenes/home_port.tscn` — Bank, Shipyard, Market, Chart Table, Bounty Board, Crew Roster, equipment crafting, and voyage selection.
+- `scenes/open_sea.tscn` — Tier-scaled chart, movement/exploration, enemy targeting, field repairs, emergency rations, boss encounters, tactical badges/event feed, and extraction.
 - `scenes/main_debug.tscn` — legacy development harness.
 
 ## Autoloads (`project.godot`)
 
 - `GameClock` (`scripts/autoloads/GameClock.gd`) — fixed-step simulation and suspension pause.
-- `PlayerData` (`scripts/autoloads/PlayerData.gd`) — inventory, progression, currencies, ship/equipment levels, persistent relics, voyage actions, and settlement.
-- `SaveManager` (`scripts/autoloads/SaveManager.gd`) — persistent save/recovery and state-change writes.
+- `PlayerData` (`scripts/autoloads/PlayerData.gd`) — inventory, progression, currencies, ship/equipment levels, crew, relics, bounties, voyage actions, and settlement.
+- `SaveManager` (`scripts/autoloads/SaveManager.gd`) — persistent save/recovery, state-change writes, and checked reset of the live save and recovery files.
 - `AssetManager` (`scripts/autoloads/AssetManager.gd`) — public asset mapping, cache, and bundled fallbacks.
-- `SettingsManager` (`scripts/autoloads/SettingsManager.gd`) — persisted accessibility preferences and Master/SFX volume levels.
-- `AudioCue` (`scripts/autoloads/AudioCue.gd`) — synthesizes lightweight mono WAV samples in memory and plays six gameplay cues on the SFX bus; no external audio files are required.
+- `SettingsManager` (`scripts/autoloads/SettingsManager.gd`) — persisted accessibility, audio, and briefing preferences in `user://settings.cfg`, separate from save data.
+- `AudioCue` (`scripts/autoloads/AudioCue.gd`) — synthesizes lightweight mono WAV samples in memory and plays six gameplay cues on the SFX bus.
 
 ## Core data and features
 
-- `data/mvp_constants.gd` centralizes ships, items, provision bundles, tier gates, chart sizes, enemy and boss scaling, field-action values, extraction margin, and equipment recipes.
-- `data/voyage_state.gd` owns seeded chart generation, movement, hazards/sites, enemies, combat, carried repair/ration stocks, boss drops, temporary movement bursts, and voyage serialization.
-- Repair planks restore up to 40 hull HP each. An emergency ration grants +1 movement tile on the next move. Both are consumed from voyage provisions; using either costs an action, so enemies and hazards continue acting.
-- Tier 3 spawns a 420-HP Sea Monster (28 damage) that drops a Sea Serpent Scale; Tier 4 spawns a 650-HP Dreadnought Captain (38 damage) that drops a Dreadnought Insignia. The Sea Serpent Scale grants +25 maximum hull. The Insignia grants +5 cannon damage and +10% extraction Gold. Unique relics persist in player saves, are tracked in the Journal, and are banked on extraction.
-- Harbor Bounties offer three active contracts per cycle: defeat two enemy vessels, finish a site scavenging action, and safely extract from the cycle's assigned tier. Each pays bonus Gold, Doubloons, and a banked material. Progress, completion, and cycle state persist; cycles rotate after three launched voyages.
-- Runtime cues cover cannon fire, hull impacts, repairs, emergency rations, salvage/relic pickups, and safe extraction. Master and SFX sliders update the audio buses immediately and persist in `user://settings.cfg`.
-- The Open Sea HUD shows the selected Captain perk, owned/equipped Relics, remaining actions/ammunition/repairs/rations, and the six most recent voyage event messages including damage, loot, and Relic triggers.
-- The extraction guarantee is based on the full market value of every consumed launch provision (repair planks, cannonballs, and food), plus the established 25% profit margin. Tier 1–4 safe extraction retains that invariant even when field supplies are used; optional combat salvage/relics add rewards rather than being required for the guarantee.
-- `.github/workflows/android-build.yml` runs only through `workflow_dispatch`; when manually invoked it installs Godot 4.7.2, export templates, Java 17 and Android SDK components, then exports `build/UnchartedTides-debug.apk` as an artifact. No signing secrets or release keystore are required.
-- `export_presets.cfg` defines the Android debug-test preset with package ID `com.maddog.unchartedtides` and arm64-v8a ABI.
-- `scripts/tests/stage2_*_smoke.gd` are the contract, mechanics, and UI headless smoke suites (names retained from earlier stages).
-
-- Stage 7 adds three hireable specialists with up to two active crew, chart events (distress, tailwind, fog), saved event/crew state, Sailing milestone configuration, and repeatable prestige costs/bonuses. Android workflow remains manual-only.
-
+- Save schema version 6; `PlayerData.deserialize()` fills legacy Stage 1–7 defaults, clamps progression and quantities, validates ships, captain perks, skills, crew, relics, milestones, bounties, and inventory IDs. `VoyageState.from_dict()` preserves valid legacy fields while validating chart positions, cargo, hazards, sites, enemies, events, crew, and relics. Legacy reef-position saves remain supported.
+- Reset requires an explicit Settings action followed by a separate confirmation. `SaveManager.wipe_save()` removes `save_data.json`, `.tmp`, and `.bak`, then resets PlayerData and GameClock; device display/audio/onboarding preferences are intentionally untouched. Removal failures are reported without resetting in-memory progress.
+- A new profile sees the dismissible Captain's Briefing once; profiles with voyage history are not interrupted. It explains highlighted movement, provisions and field repairs, island/wreck action ticks, and extraction payout; Settings can replay it at any time.
+- All Main Menu modals are constrained to the landscape viewport and put their content in a vertical `ScrollContainer`. Labels wrap; close, cancel, and confirmation buttons retain touch-sized minimum heights.
+- Brigantine requires Sailing 20, 3,000 Gold, 20 Oak Planks and 10 Iron Bars; Galleon requires Sailing 40, 18,000 Gold, 40 Mahogany Planks and 20 Mithril Bars; Man-o'-War requires Sailing 60, 75,000 Gold, 80 Magic Planks and 40 Runite Bars. Tier 2–4 voyage Sailing gates match 20/40/60 and still require the corresponding ship class.
+- Every successful voyage action grants `400 × tier²` Sailing XP; safe extraction grants an additional `1,200 × tier`. Tier 1–4 island/wreck yields are 10 Oak Planks/5 Iron Bars, 12 Mahogany Planks/6 Mithril Bars, 16 Magic Planks/8 Runite Bars, and 20 Magic Planks/10 Runite Bars, respectively.
+- Guaranteed extraction Gold covers full provision market value plus the existing 25% profit margin. Per-tier site material values and the Sailing/ship gates are included in the mechanics smoke checks. Bounties, crew rewards, and Fleet Prestige continue the long-term economy loop.
+- Stage 3–7 features remain: open-sea hazards and exploration, safe extraction, combat and bosses, craftable upgrades, Harbor Bounties, audio cues, Crew Roster, maritime events, Sailing Mastery, and Fleet Prestige.
+- `.github/workflows/android-build.yml` has only the `workflow_dispatch` trigger. Do not run an APK compilation workflow for Stage 8.
+- `scripts/tests/stage2_*_smoke.gd` contain the contract, mechanics/progression, and UI smoke suites (legacy filenames retained).
 
 ## Completed milestones
 
 - Stage 1: foundational data contracts and save/economy systems.
 - Stage 2: Main Menu, Home Port, Bank, Shipyard, Market, and Chart Table flows.
-- Stage 3: Open Sea loop, procedural hazards and exploration, safe extraction, settings, Captain perks, and Journal.
-- Stage 4: Tier-scaled charts, pirate combat and salvage, and craftable ship equipment.
-- Stage 5: field repairs, emergency rations, Tier 3–4 bosses and collectible passive Captain Relics, and tier-by-tier extraction-profit checks.
-- Stage 6: persistent three-contract Harbor Bounty cycles, procedural audio and saved volume sliders, and an in-voyage tactical HUD/event feed; Android APK workflow made manual-only.
+- Stage 3: Open Sea loop, procedural hazards and exploration, safe extraction, Settings, Captain perks, and Journal.
+- Stage 4: tier-scaled charts, pirate combat/salvage, and craftable ship equipment.
+- Stage 5: field repairs, emergency rations, Tier 3–4 bosses and collectible passive Captain Relics, and extraction-profit checks.
+- Stage 6: persistent Harbor Bounties, procedural audio and saved volume sliders, tactical HUD/event feed, and manual-only Android workflow.
+- Stage 7: hireable crew, maritime events, Sailing mastery, Fleet Prestige, and touch polish.
+- Stage 8: first-voyage onboarding/replay, confirmed save reset, Stage 1–7 migration hardening, landscape-responsive scrollable modals, and progression/economy balance pass.
 
-## Final validation
+## Final verification and release
 
-Run the Godot 4.7.2 project parse and the contract, mechanics, and UI smoke suites once as a single final verification batch after Stage 7 changes are complete. Passing headless checks does not replace on-device layout, touch, install, or lifecycle testing.
+After all Stage 8 source, tests, and documentation changes are complete, run the Godot 4.7.2 headless editor parse and then each of the three suites once: `stage2_contract_smoke.gd`, `stage2_mechanics_smoke.gd`, and `stage2_ui_smoke.gd`. This is a headless smoke pass, not a substitute for Android landscape/touch/lifecycle testing. Keep the Android workflow manual-only and do not trigger APK compilation.

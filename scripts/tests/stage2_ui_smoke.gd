@@ -28,7 +28,10 @@ func _run() -> void:
 	var saves: Node = root.get_node("SaveManager")
 	var player: Node = root.get_node("PlayerData")
 	var game_clock: Node = root.get_node("GameClock")
+	var settings_manager: Node = root.get_node("SettingsManager")
+	var old_briefing_seen: bool = settings_manager.briefing_seen
 	saves.wipe_save()
+	settings_manager.set_briefing_seen(false)
 	var scene_error: Error = change_scene_to_file("res://scenes/main_menu.tscn")
 	_check(scene_error == OK, "Main Menu scene opens")
 	await process_frame
@@ -40,11 +43,25 @@ func _run() -> void:
 		return
 	for hotspot_name in ["SettingsHotspot", "SelectCharacterHotspot", "JournalHotspot", "NavigateHotspot", "StartVoyageHotspot"]:
 		_check(menu.find_child(hotspot_name, true, false) is Button, "Menu hotspot exists: " + hotspot_name)
+	var briefing_panel := menu.find_child("MenuModal", true, false) as Control
+	var viewport_bounds := Rect2(Vector2.ZERO, menu.get_viewport_rect().size)
+	_check(briefing_panel != null and viewport_bounds.encloses(briefing_panel.get_global_rect()), "Briefing modal stays inside landscape viewport bounds")
+	var briefing_copy: String = ""
+	if briefing_panel != null:
+		for label_node in briefing_panel.find_children("*", "Label", true, false):
+			briefing_copy += " " + str((label_node as Label).text)
+	_check(briefing_copy.contains("Movement") and briefing_copy.contains("Provisions") and briefing_copy.contains("island") and briefing_copy.contains("Guaranteed Gold"), "New profiles see an explanatory Captain's Briefing before navigating")
+	var briefing_scroll := menu.find_child("ModalContentScroll", true, false) as ScrollContainer
+	_check(briefing_scroll != null and briefing_scroll.get_parent() != null, "Briefing content is placed in the adaptive scrollable modal")
+	var briefing_close := _find_button(menu, "Close")
+	if briefing_close != null:
+		briefing_close.pressed.emit()
+	await process_frame
+	_check(settings_manager.briefing_seen, "Dismissing first-run briefing records it as seen")
 	_check(menu.find_child("BeginYourOdysseyHotspot", true, false) == null, "No prohibited Begin Your Odyssey control exists")
 	var menu_art: TextureRect = menu.find_child("MenuArtwork", true, false) as TextureRect
 	_check(menu_art != null and menu_art.texture is AtlasTexture and (menu_art.texture as AtlasTexture).region.size.y == 640.0, "Menu artwork crop excludes bottom strip")
 	var start_button := menu.find_child("StartVoyageHotspot", true, false) as Button
-	var settings_manager: Node = root.get_node("SettingsManager")
 	var old_text_size: int = settings_manager.text_size_index
 	var old_reduced_motion: bool = settings_manager.reduced_motion
 	var old_master_volume: float = settings_manager.master_volume
@@ -81,7 +98,17 @@ func _run() -> void:
 	settings_manager.set_reduced_motion(old_reduced_motion)
 	settings_manager.set_master_volume(old_master_volume)
 	settings_manager.set_sfx_volume(old_sfx_volume)
+	var replay_button := _find_button(menu, "Replay Captain's Briefing")
+	if replay_button != null:
+		replay_button.pressed.emit()
+	await process_frame
+	_check(menu.find_child("CaptainBriefingContent", true, false) is VBoxContainer, "Settings replay action reopens the briefing")
 	var close_modal := _find_button(menu, "Close")
+	if close_modal != null:
+		close_modal.pressed.emit()
+	await process_frame
+	_check(settings_manager.briefing_seen, "Replayed briefing is dismissible and remains marked seen")
+	close_modal = _find_button(menu, "Close")
 	if close_modal != null:
 		close_modal.pressed.emit()
 	await process_frame
@@ -241,10 +268,46 @@ func _run() -> void:
 		withdraw_button.pressed.emit()
 	await process_frame
 	_check(int(player.bank.get("copper_ore", 0)) == 3 and player.backpack.size() == 2, "Bank UI withdraws one banked item")
+	var back_to_menu := _find_button(bank_scene, "Main Menu")
+	if back_to_menu != null:
+		back_to_menu.pressed.emit()
+	await create_timer(0.35).timeout
+	await process_frame
+	var reset_menu: Node = current_scene
+	var reset_settings := reset_menu.find_child("SettingsHotspot", true, false) as Button if reset_menu != null else null
+	if reset_settings != null:
+		reset_settings.pressed.emit()
+	await process_frame
+	var reset_button := _find_button(reset_menu, "Reset Save Data…")
+	if reset_button != null:
+		reset_button.pressed.emit()
+	await process_frame
+	_check(reset_menu.find_child("ConfirmResetSaveButton", true, false) is Button, "Reset Save Data opens a separate confirmation step")
+	var gold_before_cancel: int = player.gold
+	var cancel_reset := _find_button(reset_menu, "Cancel")
+	if cancel_reset != null:
+		cancel_reset.pressed.emit()
+	await process_frame
+	_check(player.gold == gold_before_cancel and settings_manager.briefing_seen, "Cancel leaves save progress and Settings untouched")
+	reset_settings = reset_menu.find_child("SettingsHotspot", true, false) as Button
+	if reset_settings != null:
+		reset_settings.pressed.emit()
+	await process_frame
+	reset_button = _find_button(reset_menu, "Reset Save Data…")
+	if reset_button != null:
+		reset_button.pressed.emit()
+	await process_frame
+	var confirm_reset := reset_menu.find_child("ConfirmResetSaveButton", true, false) as Button
+	if confirm_reset != null:
+		confirm_reset.pressed.emit()
+	await process_frame
+	_check(player.gold == 1000 and player.career_stats.voyages_started == 0 and not player.voyage.is_active, "Confirmed reset clears voyage, currency, and Journal save data")
+	_check(settings_manager.briefing_seen, "Confirmed save reset preserves briefing and other separate Settings preferences")
+	settings_manager.set_briefing_seen(old_briefing_seen)
 	saves.wipe_save()
 	if _failures == 0:
-		print("Stage 6 UI smoke tests passed.")
+		print("Stage 8 UI smoke tests passed.")
 		quit(0)
 	else:
-		push_error("%d Stage 6 UI smoke test(s) failed." % _failures)
+		push_error("%d Stage 8 UI smoke test(s) failed." % _failures)
 		quit(1)

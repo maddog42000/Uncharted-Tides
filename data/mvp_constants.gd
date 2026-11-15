@@ -36,19 +36,19 @@ const SHIPS: Dictionary = {
 		"cost_materials": {}, "previous_ship_id": ""
 	},
 	"oak_brigantine": {
-		"name": "Oak Brigantine", "req_sailing": 30, "max_hp": 250,
-		"cargo_slots": 16, "cannons_per_side": 2, "movement_range": 2, "cost_gold": 5000,
-		"cost_materials": {"oak_plank": 40, "iron_bar": 20}, "previous_ship_id": "wooden_sloop"
+		"name": "Oak Brigantine", "req_sailing": 20, "max_hp": 250,
+		"cargo_slots": 16, "cannons_per_side": 2, "movement_range": 2, "cost_gold": 3000,
+		"cost_materials": {"oak_plank": 20, "iron_bar": 10}, "previous_ship_id": "wooden_sloop"
 	},
 	"mahogany_galleon": {
-		"name": "Mahogany Galleon", "req_sailing": 60, "max_hp": 500,
-		"cargo_slots": 28, "cannons_per_side": 4, "movement_range": 3, "cost_gold": 35000,
-		"cost_materials": {"mahogany_plank": 80, "mithril_bar": 40}, "previous_ship_id": "oak_brigantine"
+		"name": "Mahogany Galleon", "req_sailing": 40, "max_hp": 500,
+		"cargo_slots": 28, "cannons_per_side": 4, "movement_range": 3, "cost_gold": 18000,
+		"cost_materials": {"mahogany_plank": 40, "mithril_bar": 20}, "previous_ship_id": "oak_brigantine"
 	},
 	"dragonwood_man_owar": {
-		"name": "Dragonwood Man-o'-War", "req_sailing": 85, "max_hp": 900,
-		"cargo_slots": 40, "cannons_per_side": 6, "movement_range": 4, "cost_gold": 150000,
-		"cost_materials": {"magic_plank": 120, "runite_bar": 60}, "previous_ship_id": "mahogany_galleon"
+		"name": "Dragonwood Man-o'-War", "req_sailing": 60, "max_hp": 900,
+		"cargo_slots": 40, "cannons_per_side": 6, "movement_range": 4, "cost_gold": 75000,
+		"cost_materials": {"magic_plank": 80, "runite_bar": 40}, "previous_ship_id": "mahogany_galleon"
 	}
 }
 
@@ -96,6 +96,14 @@ const EQUIPMENT: Dictionary = {
 	"hull": {"name": "Hull Reinforcement", "item": "copper_ore", "qty": [8, 16, 24], "plank": "mahogany_plank", "plank_qty": [4, 8, 12], "gold": [500, 1500, 4000], "doubloons": [0, 1, 2]}
 }
 const SITE_WORK_TICKS: Dictionary = {"island": 2, "shipwreck": 3}
+const SITE_REWARDS_BY_TIER: Dictionary = {
+	1: {"island_item":"oak_plank", "island_qty":10, "wreck_item":"iron_bar", "wreck_qty":5},
+	2: {"island_item":"mahogany_plank", "island_qty":12, "wreck_item":"mithril_bar", "wreck_qty":6},
+	3: {"island_item":"magic_plank", "island_qty":16, "wreck_item":"runite_bar", "wreck_qty":8},
+	4: {"island_item":"magic_plank", "island_qty":20, "wreck_item":"runite_bar", "wreck_qty":10}
+}
+const SAILING_XP_PER_ACTION: int = 400
+const SAILING_XP_EXTRACTION_BASE: int = 1200
 
 const CREW_SPECIALISTS: Dictionary = {
 	"master_gunner": {"name":"Master Gunner", "gold":2500, "doubloons":2, "bonus":"+6 cannon damage"},
@@ -120,7 +128,7 @@ const VOYAGE_PROVISIONS: Dictionary = {
 
 const VOYAGE_TIER_REQUIREMENTS: Dictionary = {
 	1: {"req_sailing": 1, "ship_tier": 1},
-	2: {"req_sailing": 25, "ship_tier": 2},
-	3: {"req_sailing": 50, "ship_tier": 3},
-	4: {"req_sailing": 75, "ship_tier": 4}
+	2: {"req_sailing": 20, "ship_tier": 2},
+	3: {"req_sailing": 40, "ship_tier": 3},
+	4: {"req_sailing": 60, "ship_tier": 4}
 }

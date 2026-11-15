@@ -85,6 +85,10 @@ func _run() -> void:
 				for cargo_item in tier_voyage.ship_cargo:
 					if str(cargo_item.get("item_id", "")) == "sea_serpent_scale": relic_dropped = true
 				_check(boss_shot.success and relic_dropped and tier_voyage.event_feed.back().contains("Unique relic recovered"), "Defeating the Tier 3 boss drops its unique Captain Relic and records the trigger")
+		var tier_rewards: Dictionary = Constants.SITE_REWARDS_BY_TIER[tier]
+		var site_market_value: int = int(tier_rewards.island_qty) * int(Constants.ITEM_SELL_PRICES[tier_rewards.island_item]) + int(tier_rewards.wreck_qty) * int(Constants.ITEM_SELL_PRICES[tier_rewards.wreck_item])
+		_check(site_market_value > tier_cost and int(Constants.TIER_BASE_GUARANTEE[tier]) > tier_cost, "Tier %d exploration materials and guaranteed Gold exceed the provisions baseline" % tier)
+	_check(int(Constants.SHIPS.oak_brigantine.req_sailing) == int(Constants.VOYAGE_TIER_REQUIREMENTS[2].req_sailing) and int(Constants.SHIPS.mahogany_galleon.req_sailing) == int(Constants.VOYAGE_TIER_REQUIREMENTS[3].req_sailing) and int(Constants.SHIPS.dragonwood_man_owar.req_sailing) == int(Constants.VOYAGE_TIER_REQUIREMENTS[4].req_sailing), "Ship upgrades and Tier 2–4 voyage gates share the tuned Sailing milestones")
 	var navigator = VoyageStateScript.new()
 	navigator.start_new_voyage(1, 78, "wooden_sloop", "navigator")
 	_check(navigator.movement_range() == 2, "Navigator gains one movement tile per action")
@@ -181,19 +185,23 @@ func _run() -> void:
 	var previous_motion: bool = settings_manager.reduced_motion
 	var previous_master_volume: float = settings_manager.master_volume
 	var previous_sfx_volume: float = settings_manager.sfx_volume
+	var previous_briefing_seen: bool = settings_manager.briefing_seen
 	settings_manager.set_text_size(2)
 	settings_manager.set_reduced_motion(true)
 	settings_manager.set_master_volume(0.37)
 	settings_manager.set_sfx_volume(0.61)
+	settings_manager.set_briefing_seen(true)
 	var reloaded_settings = SettingsManagerScript.new()
 	reloaded_settings._load_settings()
 	_check(reloaded_settings.text_size_index == 2 and reloaded_settings.reduced_motion and settings_manager.text_scale() == 1.15 and settings_manager.transition_duration(0.2) == 0.0, "Text size and reduced motion settings persist and affect presentation")
 	_check(is_equal_approx(reloaded_settings.master_volume, 0.37) and is_equal_approx(reloaded_settings.sfx_volume, 0.61), "Master and SFX audio volumes persist through settings reload")
+	_check(reloaded_settings.briefing_seen, "Dismissed Captain's Briefing state persists independently in Settings")
 	reloaded_settings.free()
 	settings_manager.set_text_size(previous_text_size)
 	settings_manager.set_reduced_motion(previous_motion)
 	settings_manager.set_master_volume(previous_master_volume)
 	settings_manager.set_sfx_volume(previous_sfx_volume)
+	settings_manager.set_briefing_seen(previous_briefing_seen)
 	player.reset_to_defaults()
 	player.bank = Constants.VOYAGE_PROVISIONS[1].duplicate(true)
 	var launch_result: Dictionary = player.launch_voyage(1, 515)
@@ -223,8 +231,20 @@ func _run() -> void:
 	player.deserialize(stage7_save)
 	_check(player.hired_crew.has("master_gunner") and player.voyage.crew.has("master_gunner"), "Crew hiring and voyage snapshot persist")
 	player.reset_to_defaults()
+	player.voyage.start_new_voyage(1, 991, "wooden_sloop")
+	player.voyage.hazards.clear()
+	player.voyage.enemies.clear()
+	player.voyage.sea_events.clear()
+	var route_ok: bool = true
+	for x in range(1, 10):
+		if not bool(player.move_open_sea_to(Vector2i(x, 0)).get("success", false)): route_ok = false
+	for y in range(1, 10):
+		if not bool(player.move_open_sea_to(Vector2i(9, y)).get("success", false)): route_ok = false
+	_check(route_ok and not player.voyage.is_active and player.get_level("Sailing") >= 20, "A complete Tier 1 voyage naturally awards enough Sailing XP to reach the Brigantine gate")
+	_check(int(player.skill_xp.Sailing) == 18 * Constants.SAILING_XP_PER_ACTION + Constants.SAILING_XP_EXTRACTION_BASE, "Successful chart actions and extraction each award their configured Sailing XP")
+	player.reset_to_defaults()
 	if failures == 0:
-		print("Stage 7 mechanics smoke tests passed.")
+		print("Stage 8 mechanics smoke tests passed.")
 		quit(0)
 	else:
 		push_error("%d mechanics smoke test(s) failed." % failures)

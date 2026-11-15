@@ -11,6 +11,7 @@ const CAPTAIN_OPTIONS: Dictionary = {
 }
 var _background: TextureRect
 var _modal_layer: Control
+var _modal_footer: VBoxContainer
 var _hotspots: Array[Button] = []
 var _transitioning: bool = false
 
@@ -21,6 +22,7 @@ func _ready() -> void:
 	SettingsManager.settings_changed.connect(_apply_settings)
 	AssetManager.request_texture("main_menu", _on_menu_art_loaded)
 	_apply_settings()
+	call_deferred("_maybe_show_first_run_briefing")
 
 func _build_screen() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -88,7 +90,7 @@ func _layout_hotspots() -> void:
 			button.size = source_rect.size * ui_scale
 
 func _show_settings() -> void:
-	var box := _begin_modal("Settings", "Display, accessibility, and audio preferences are saved on this device.", Vector2(600, 470))
+	var box := _begin_modal("Settings", "Display, accessibility, audio, and onboarding preferences are saved on this device.", Vector2(660, 540))
 	var size_row := HBoxContainer.new()
 	var size_label := _modal_label("Text size", 19)
 	size_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -112,7 +114,65 @@ func _show_settings() -> void:
 	motion.toggled.connect(SettingsManager.set_reduced_motion)
 	box.add_child(motion)
 	box.add_child(_modal_label("Reduced motion skips decorative scene fades. Volume sliders update immediately and persist between launches.", 15))
+	var briefing := Button.new()
+	briefing.text = "Replay Captain's Briefing"
+	briefing.custom_minimum_size.y = 58
+	briefing.pressed.connect(_show_briefing)
+	box.add_child(briefing)
+	var reset := Button.new()
+	reset.text = "Reset Save Data…"
+	reset.custom_minimum_size.y = 58
+	reset.pressed.connect(_show_reset_confirmation)
+	box.add_child(reset)
 	_finish_modal(box)
+
+func _maybe_show_first_run_briefing() -> void:
+	if SettingsManager.briefing_seen:
+		return
+	if int(PlayerData.career_stats.get("voyages_started", 0)) > 0:
+		SettingsManager.set_briefing_seen(true)
+		return
+	_show_briefing()
+
+func _show_briefing() -> void:
+	var box := _begin_modal("Captain's Briefing", "A quick guide before your first voyage. You can replay this any time from Settings.", Vector2(680, 560))
+	box.name = "CaptainBriefingContent"
+	box.set_meta("briefing_seen_on_close", true)
+	for section in [
+		["Movement", "Tap any highlighted chart tile to sail within your ship's movement range. Each action advances the voyage."],
+		["Provisions & repairs", "Launch provisions are consumed when you set sail. Repair planks restore hull at sea; emergency rations extend your next move."],
+		["Islands & wrecks", "Anchor on an island or wreck and spend the shown number of action ticks to recover tier-appropriate upgrade materials."],
+		["Safe extraction", "Reach the marked harbor to bank cargo. Guaranteed Gold covers the market value of launch provisions plus the displayed profit margin; optional salvage and bounties add more rewards."]
+	]:
+		var card := PanelContainer.new()
+		var text := _modal_label("%s\n%s" % [str(section[0]), str(section[1])], 17)
+		card.add_child(text)
+		box.add_child(card)
+	_finish_modal(box)
+
+func _show_reset_confirmation() -> void:
+	var box := _begin_modal("Reset Save Data?", "This permanently deletes the live save and recovery copies, then starts a new game. Display, audio, and briefing settings are preserved.", Vector2(600, 340))
+	var warning := _modal_label("This cannot be undone. Your ships, currencies, cargo, skills, crew, relics, bounties, prestige, and journal totals will be erased.", 16)
+	warning.add_theme_color_override("font_color", Color("#ffb5a8"))
+	box.add_child(warning)
+	var confirm := Button.new()
+	confirm.name = "ConfirmResetSaveButton"
+	confirm.text = "Confirm Reset Save Data"
+	confirm.custom_minimum_size.y = 60
+	confirm.pressed.connect(_confirm_reset_save)
+	box.add_child(confirm)
+	var cancel := Button.new()
+	cancel.text = "Cancel"
+	cancel.custom_minimum_size.y = 56
+	cancel.pressed.connect(_close_modal)
+	box.add_child(cancel)
+	_finish_modal(box)
+
+func _confirm_reset_save() -> void:
+	if not SaveManager.wipe_save():
+		_show_message("Reset Could Not Complete", "The save files could not all be removed. Your current progress was not reset; check device storage permissions and try again.")
+		return
+	_show_message("Save Data Reset", "Your save progress was erased. Start a new game when ready; your device settings were preserved.")
 
 func _make_volume_control(title_text: String, volume: float, setter: Callable) -> VBoxContainer:
 	var container := VBoxContainer.new()
@@ -228,23 +288,38 @@ func _begin_modal(title_text: String, body_text: String, panel_size: Vector2) ->
 	_modal_layer.add_child(shade)
 	var panel := PanelContainer.new()
 	panel.name = "MenuModal"
-	panel.custom_minimum_size = panel_size
+	var viewport_size: Vector2 = get_viewport_rect().size
+	var safe_size := Vector2(minf(panel_size.x, viewport_size.x * 0.94), minf(panel_size.y, viewport_size.y * 0.90))
+	panel.custom_minimum_size = safe_size
+	panel.size = safe_size
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = -panel_size * 0.5
+	panel.position = -safe_size * 0.5
 	var margin := MarginContainer.new()
 	for edge in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + edge, 18)
+		margin.add_theme_constant_override("margin_" + edge, 12)
 	panel.add_child(margin)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
-	margin.add_child(box)
+	var modal_root := VBoxContainer.new()
+	modal_root.add_theme_constant_override("separation", 10)
+	margin.add_child(modal_root)
 	var title := _modal_label(title_text, 28)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
+	modal_root.add_child(title)
 	var body := _modal_label(body_text, 16)
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var scroll := ScrollContainer.new()
+	scroll.name = "ModalContentScroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.custom_minimum_size.y = maxf(70.0, minf(safe_size.y * 0.46, safe_size.y - 150.0))
+	modal_root.add_child(scroll)
+	var box := VBoxContainer.new()
+	box.name = "ModalContent"
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_theme_constant_override("separation", 10)
+	scroll.add_child(box)
 	box.add_child(body)
+	_modal_footer = modal_root
 	panel.set_meta("modal_box", box)
 	_modal_layer.add_child(panel)
 	return box
@@ -254,16 +329,26 @@ func _finish_modal(box: VBoxContainer) -> void:
 	close.text = "Close"
 	close.custom_minimum_size = Vector2(0, 52)
 	close.pressed.connect(_close_modal)
-	box.add_child(close)
+	_modal_footer.add_child(close)
 	_apply_settings()
 
 func _modal_label(text: String, font_size: int) -> Label:
 	var label := Label.new()
 	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.add_theme_font_size_override("font_size", font_size)
 	return label
 
 func _close_modal() -> void:
+	var panel: Control
+	for child in _modal_layer.get_children():
+		if child is Control and child.name == "MenuModal":
+			panel = child as Control
+	if panel != null:
+		var box: VBoxContainer = panel.get_meta("modal_box", null) as VBoxContainer
+		if box != null and bool(box.get_meta("briefing_seen_on_close", false)):
+			SettingsManager.set_briefing_seen(true)
 	_modal_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for child in _modal_layer.get_children():
 		child.queue_free()

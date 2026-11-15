@@ -2,6 +2,7 @@ extends Node
 
 const Constants = preload("res://data/mvp_constants.gd")
 const VoyageStateScript = preload("res://data/voyage_state.gd")
+const SAVE_SCHEMA_VERSION: int = 6
 
 signal xp_gained(skill_name: String, amount: int, new_total: int)
 signal level_up(skill_name: String, new_level: int)
@@ -421,7 +422,9 @@ func move_open_sea_to(destination: Vector2i) -> Dictionary:
 
 func resolve_sea_event(choice: String) -> Dictionary:
 	var r: Dictionary = voyage.resolve_sea_event(choice)
-	if r.success: state_changed.emit()
+	if r.success:
+		_award_sailing_action_xp(voyage.tier, false)
+		state_changed.emit()
 	return r
 
 func advance_exploration_tick() -> Dictionary:
@@ -438,6 +441,8 @@ func advance_exploration_tick() -> Dictionary:
 	return _settle_voyage_result(result)
 
 func _settle_voyage_result(result: Dictionary) -> Dictionary:
+	var action_tier: int = clampi(voyage.tier, 1, 4)
+	_award_sailing_action_xp(action_tier, bool(result.get("extracted", false)))
 	if bool(result.get("sunk", false)):
 		# Permanent ship tier is separate from the disposable voyage and its cargo.
 		voyage = VoyageStateScript.new()
@@ -489,6 +494,18 @@ func _settle_voyage_result(result: Dictionary) -> Dictionary:
 	state_changed.emit()
 	return result
 
+func _award_sailing_action_xp(voyage_tier: int, extracted: bool) -> void:
+	var normalized_tier: int = clampi(voyage_tier, 1, 4)
+	var old_level: int = get_level("Sailing")
+	var amount: int = Constants.SAILING_XP_PER_ACTION * normalized_tier * normalized_tier
+	if extracted:
+		amount += Constants.SAILING_XP_EXTRACTION_BASE * normalized_tier
+	skill_xp["Sailing"] = maxi(0, int(skill_xp.get("Sailing", 0))) + amount
+	xp_gained.emit("Sailing", amount, int(skill_xp["Sailing"]))
+	var new_level: int = get_level("Sailing")
+	if new_level > old_level:
+		level_up.emit("Sailing", new_level)
+
 func transfer_backpack_to_cargo() -> Dictionary:
 	var max_cargo: int = int(Constants.SHIPS.get(active_ship_id, {}).get("cargo_slots", 8))
 	var transferred: int = 0
@@ -522,7 +539,7 @@ func extract_cargo_to_bank() -> int:
 
 func serialize() -> Dictionary:
 	return {
-		"version": 5,
+		"version": SAVE_SCHEMA_VERSION,
 		"tick_count": GameClock.tick_count,
 		"active_ship_id": active_ship_id,
 		"gold": gold,
@@ -543,6 +560,8 @@ func serialize() -> Dictionary:
 func deserialize(data: Dictionary) -> void:
 	GameClock.tick_count = maxi(0, int(data.get("tick_count", 0)))
 	active_ship_id = str(data.get("active_ship_id", "wooden_sloop"))
+	if not Constants.SHIPS.has(active_ship_id):
+		active_ship_id = "wooden_sloop"
 	gold = maxi(0, int(data.get("gold", 1000)))
 	doubloons = maxi(0, int(data.get("doubloons", 0)))
 	captain_background = str(data.get("captain_background", "merchant"))
@@ -557,9 +576,35 @@ func deserialize(data: Dictionary) -> void:
 	bounty_contracts.clear()
 	var loaded_bounties: Variant = data.get("bounty_contracts", [])
 	if loaded_bounties is Array:
-		for contract in loaded_bounties:
-			if contract is Dictionary and contract.has("id"):
-				bounty_contracts.append(contract.duplicate(true))
+		for template in Constants.BOUNTY_TEMPLATES:
+			for contract in loaded_bounties:
+				if not contract is Dictionary or str(contract.get("id", "")) != str(template.id):
+					continue
+				var clean_contract: Dictionary = template.duplicate(true)
+				var goal: int = maxi(1, int(template.get("goal", 1)))
+				clean_contract["progress"] = clampi(int(contract.get("progress", 0)), 0, goal)
+				clean_contract["completed"] = bool(contract.get("completed", false)) and int(clean_contract.progress) >= goal
+				clean_contract["cycle"] = maxi(0, int(contract.get("cycle", bounty_cycle)))
+				if str(template.get("kind", "")) == "extract_tier":
+					clean_contract["tier"] = clampi(int(contract.get("tier", 1)), 1, 4)
+					clean_contract["description"] = "Safely extract from a Tier %d voyage." % int(clean_contract.tier)
+				bounty_contracts.append(clean_contract)
+				break
+		for template in Constants.BOUNTY_TEMPLATES:
+			var found_contract: bool = false
+			for contract in bounty_contracts:
+				if str(contract.get("id", "")) == str(template.id):
+					found_contract = true
+					break
+			if not found_contract:
+				var fresh_contract: Dictionary = template.duplicate(true)
+				fresh_contract["progress"] = 0
+				fresh_contract["completed"] = false
+				fresh_contract["cycle"] = maxi(0, bounty_cycle)
+				if str(template.get("kind", "")) == "extract_tier":
+					fresh_contract["tier"] = (maxi(0, bounty_cycle) % 4) + 1
+					fresh_contract["description"] = "Safely extract from a Tier %d voyage." % int(fresh_contract.tier)
+				bounty_contracts.append(fresh_contract)
 	var saved_equipment: Variant = data.get("equipment_levels", {})
 	equipment_levels = {"cannons": 0, "sails": 0, "hull": 0}
 	if saved_equipment is Dictionary:
@@ -575,31 +620,39 @@ func deserialize(data: Dictionary) -> void:
 	var crew_save: Variant = data.get("hired_crew", [])
 	if crew_save is Array:
 		for cid in crew_save:
-			if Constants.CREW_SPECIALISTS.has(str(cid)): hired_crew.append(str(cid))
+			if Constants.CREW_SPECIALISTS.has(str(cid)) and not hired_crew.has(str(cid)): hired_crew.append(str(cid))
 	active_crew.clear()
 	var active_save: Variant = data.get("active_crew", [])
 	if active_save is Array:
 		for cid in active_save:
-			if hired_crew.has(str(cid)) and active_crew.size() < 2: active_crew.append(str(cid))
-	fleet_prestige = maxi(0, int(data.get("fleet_prestige", 0)))
+			if hired_crew.has(str(cid)) and not active_crew.has(str(cid)) and active_crew.size() < 2: active_crew.append(str(cid))
+	fleet_prestige = clampi(int(data.get("fleet_prestige", 0)), 0, 1000)
 	var milestones: Variant = data.get("sailing_milestones_claimed", [])
 	sailing_milestones_claimed.clear()
 	if milestones is Array:
-		for milestone in milestones: sailing_milestones_claimed.append(int(milestone))
+		for milestone in milestones:
+			var milestone_level: int = int(milestone)
+			for configured_milestone in Constants.SAILING_MASTERY_MILESTONES:
+				if milestone_level == int(configured_milestone.get("level", 0)) and not sailing_milestones_claimed.has(milestone_level):
+					sailing_milestones_claimed.append(milestone_level)
 	var loaded_xp: Variant = data.get("skill_xp", {})
 	for skill in Constants.SKILLS:
-		skill_xp[skill] = maxi(0, int(loaded_xp.get(skill, 0))) if loaded_xp is Dictionary else 0
+		skill_xp[skill] = clampi(int(loaded_xp.get(skill, 0)), 0, xp_for_level[Constants.MAX_SKILL_LEVEL]) if loaded_xp is Dictionary else 0
 	backpack.clear()
 	var loaded_backpack: Variant = data.get("backpack", [])
 	if loaded_backpack is Array:
 		for item in loaded_backpack:
-			if item is Dictionary and item.has("item_id") and backpack.size() < Constants.MAX_BACKPACK_SLOTS:
-				backpack.append({"item_id": str(item.get("item_id", "")), "qty": maxi(1, int(item.get("qty", 1)))})
+			var item_id: String = str(item.get("item_id", "")) if item is Dictionary else ""
+			if Constants.ITEMS.has(item_id) and backpack.size() < Constants.MAX_BACKPACK_SLOTS:
+				backpack.append({"item_id": item_id, "qty": clampi(int(item.get("qty", 1)), 1, 1000000)})
 	bank.clear()
 	var loaded_bank: Variant = data.get("bank", {})
 	if loaded_bank is Dictionary:
 		for item_id in loaded_bank:
-			bank[str(item_id)] = maxi(0, int(loaded_bank[item_id]))
+			var normalized_id: String = str(item_id)
+			var quantity: int = clampi(int(loaded_bank[item_id]), 0, 100000000)
+			if Constants.ITEMS.has(normalized_id) and quantity > 0:
+				bank[normalized_id] = quantity
 	var loaded_voyage: Variant = data.get("voyage", {})
 	voyage.from_dict(loaded_voyage if loaded_voyage is Dictionary else {})
 	_ensure_bounty_cycle()

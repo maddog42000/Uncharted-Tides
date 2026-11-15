@@ -106,9 +106,10 @@ func _generate_hazards(rng: RandomNumberGenerator) -> void:
 func _generate_sites(rng: RandomNumberGenerator) -> void:
 	var island_position := _random_open_position(rng)
 	var wreck_position := _random_open_position(rng)
+	var tier_rewards: Dictionary = Constants.SITE_REWARDS_BY_TIER.get(tier, Constants.SITE_REWARDS_BY_TIER[1])
 	exploration_sites = [
-		{"id": "island_cove", "type": "island", "position": _vector_to_array(island_position), "required_ticks": int(Constants.SITE_WORK_TICKS.island), "work_ticks": 0, "reward_item": "mahogany_plank", "reward_qty": 2, "reward_gold": 0, "completed": false},
-		{"id": "shipwreck", "type": "shipwreck", "position": _vector_to_array(wreck_position), "required_ticks": int(Constants.SITE_WORK_TICKS.shipwreck), "work_ticks": 0, "reward_item": "mithril_bar", "reward_qty": 1, "reward_gold": 0, "completed": false}
+		{"id": "island_cove", "type": "island", "position": _vector_to_array(island_position), "required_ticks": int(Constants.SITE_WORK_TICKS.island), "work_ticks": 0, "reward_item": str(tier_rewards.island_item), "reward_qty": int(tier_rewards.island_qty), "reward_gold": 0, "completed": false},
+		{"id": "shipwreck", "type": "shipwreck", "position": _vector_to_array(wreck_position), "required_ticks": int(Constants.SITE_WORK_TICKS.shipwreck), "work_ticks": 0, "reward_item": str(tier_rewards.wreck_item), "reward_qty": int(tier_rewards.wreck_qty), "reward_gold": 0, "completed": false}
 	]
 
 func _random_open_position(rng: RandomNumberGenerator) -> Vector2i:
@@ -461,7 +462,7 @@ func _vector_to_array(value: Vector2i) -> Array[int]:
 
 func _array_to_vector(value: Variant, fallback: Vector2i) -> Vector2i:
 	if value is Array and value.size() >= 2:
-		return Vector2i(int(value[0]), int(value[1]))
+		return Vector2i(clampi(int(value[0]), 0, chart_size - 1), clampi(int(value[1]), 0, chart_size - 1))
 	return fallback
 
 func to_dict() -> Dictionary:
@@ -472,14 +473,17 @@ func from_dict(data: Dictionary) -> void:
 	tier = clampi(int(data.get("tier", 1)), 1, 4)
 	seed_value = int(data.get("seed_value", 0))
 	ship_id = str(data.get("ship_id", "wooden_sloop"))
+	if not Constants.SHIPS.has(ship_id): ship_id = "wooden_sloop"
 	captain_background = str(data.get("captain_background", "merchant"))
+	if not ["merchant", "navigator", "shipwright"].has(captain_background): captain_background = "merchant"
 	current_hull_hp = maxi(0, int(data.get("current_hull_hp", 100)))
 	ship_cargo.clear()
 	var saved_cargo: Variant = data.get("ship_cargo", [])
 	if saved_cargo is Array:
 		for item in saved_cargo:
-			if item is Dictionary and item.has("item_id"):
-				ship_cargo.append({"item_id": str(item.get("item_id", "")), "qty": maxi(1, int(item.get("qty", 1)))})
+			var item_id: String = str(item.get("item_id", "")) if item is Dictionary else ""
+			if Constants.ITEMS.has(item_id):
+				ship_cargo.append({"item_id": item_id, "qty": clampi(int(item.get("qty", 1)), 1, 1000000)})
 	chart_size = clampi(int(data.get("chart_size", CHART_SIZE)), 5, 20)
 	ship_position = _array_to_vector(data.get("ship_position", null), Vector2i.ZERO)
 	extraction_position = _array_to_vector(data.get("extraction_position", null), Vector2i(chart_size - 1, chart_size - 1))
@@ -490,8 +494,8 @@ func from_dict(data: Dictionary) -> void:
 	var saved_hazards: Variant = data.get("hazards", [])
 	if saved_hazards is Array:
 		for hazard in saved_hazards:
-			if hazard is Dictionary and hazard.has("position"):
-				hazards.append(hazard.duplicate(true))
+			if hazard is Dictionary and hazard.has("position") and str(hazard.get("type", "")) in ["reef", "mine", "obstacle"]:
+				hazards.append({"id": str(hazard.get("id", "legacy_hazard")), "type": str(hazard.type), "position": _vector_to_array(_array_to_vector(hazard.position, Vector2i.ZERO)), "damage": clampi(int(hazard.get("damage", LEGACY_REEF_DAMAGE)), 1, 500)})
 	if not data.has("hazards") and data.has("reef_position"):
 		hazards.append({"id": "hazard_0", "type": "reef", "position": data.get("reef_position", [5, 5]), "damage": LEGACY_REEF_DAMAGE})
 	reef_position = _array_to_vector(data.get("reef_position", null), _first_hazard_position("reef"))
@@ -499,10 +503,11 @@ func from_dict(data: Dictionary) -> void:
 	var saved_sites: Variant = data.get("exploration_sites", [])
 	if saved_sites is Array:
 		for site in saved_sites:
-			if site is Dictionary and site.has("position"):
-				exploration_sites.append(site.duplicate(true))
+			if site is Dictionary and site.has("position") and str(site.get("type", "")) in ["island", "shipwreck"] and Constants.ITEMS.has(str(site.get("reward_item", ""))):
+				var required_ticks: int = clampi(int(site.get("required_ticks", Constants.SITE_WORK_TICKS.get(str(site.type), 1))), 1, 10)
+				exploration_sites.append({"id": str(site.get("id", "legacy_site")), "type": str(site.type), "position": _vector_to_array(_array_to_vector(site.position, Vector2i.ZERO)), "required_ticks": required_ticks, "work_ticks": clampi(int(site.get("work_ticks", 0)), 0, required_ticks), "reward_item": str(site.reward_item), "reward_qty": clampi(int(site.get("reward_qty", 1)), 1, 100000), "reward_gold": maxi(0, int(site.get("reward_gold", 0))), "completed": bool(site.get("completed", false))})
 	wind_direction = _array_to_vector(data.get("wind_direction", null), Vector2i.RIGHT)
-	extraction_gold_reward = int(data.get("extraction_gold_reward", _calculate_extraction_reward(tier)))
+	extraction_gold_reward = maxi(_calculate_extraction_reward(tier), maxi(0, int(data.get("extraction_gold_reward", 0))))
 	last_action_message = str(data.get("last_action_message", ""))
 	event_feed.clear()
 	var saved_feed: Variant = data.get("event_feed", [])
@@ -519,13 +524,14 @@ func from_dict(data: Dictionary) -> void:
 	var saved_enemies: Variant = data.get("enemies", [])
 	if saved_enemies is Array:
 		for enemy in saved_enemies:
-			if enemy is Dictionary and enemy.has("position"):
-				enemies.append(enemy.duplicate(true))
+			if enemy is Dictionary and enemy.has("position") and str(enemy.get("type", "")) in ["pirate_sloop", "pirate_galleon", "sea_monster", "dreadnought_captain"]:
+				var max_enemy_hull: int = clampi(int(enemy.get("max_hull", enemy.get("hull", 1))), 1, 1000000)
+				enemies.append({"id": str(enemy.get("id", "legacy_enemy")), "type": str(enemy.type), "boss": bool(enemy.get("boss", false)), "position": _vector_to_array(_array_to_vector(enemy.position, Vector2i.ZERO)), "hull": clampi(int(enemy.get("hull", max_enemy_hull)), 0, max_enemy_hull), "max_hull": max_enemy_hull, "damage": clampi(int(enemy.get("damage", 0)), 0, 10000), "loot_gold": maxi(0, int(enemy.get("loot_gold", 0))), "relic_id": str(enemy.get("relic_id", "")) if str(enemy.get("relic_id", "")) in ["sea_serpent_scale", "dreadnought_insignia"] else "", "alive": bool(enemy.get("alive", false))})
 	relics.clear()
 	var saved_relics: Variant = data.get("relics", [])
 	if saved_relics is Array:
 		for relic in saved_relics:
-			if not relics.has(str(relic)): relics.append(str(relic))
+			if str(relic) in ["sea_serpent_scale", "dreadnought_insignia"] and not relics.has(str(relic)): relics.append(str(relic))
 	repair_stock = maxi(0, int(data.get("repair_stock", 0)))
 	ration_stock = maxi(0, int(data.get("ration_stock", 0)))
 	ration_burst_actions = clampi(int(data.get("ration_burst_actions", 0)), 0, 1)
@@ -534,11 +540,13 @@ func from_dict(data: Dictionary) -> void:
 	var saved_crew: Variant = data.get("crew", [])
 	if saved_crew is Array:
 		for crew_id in saved_crew:
-			if not crew.has(str(crew_id)): crew.append(str(crew_id))
+			if Constants.CREW_SPECIALISTS.has(str(crew_id)) and not crew.has(str(crew_id)): crew.append(str(crew_id))
 	sea_events.clear()
 	var saved_events: Variant = data.get("sea_events", [])
 	if saved_events is Array:
 		for sea_event in saved_events:
-			if sea_event is Dictionary: sea_events.append(sea_event.duplicate(true))
+			if sea_event is Dictionary and str(sea_event.get("type", "")) in ["merchant_distress", "tailwind_current", "fog_squall"]:
+				sea_events.append({"type": str(sea_event.type), "position": _vector_to_array(_array_to_vector(sea_event.get("position", []), Vector2i.ZERO)), "resolved": bool(sea_event.get("resolved", false))})
 	pending_event_index = clampi(int(data.get("pending_event_index", -1)), -1, sea_events.size() - 1)
 	fog_actions = maxi(0, int(data.get("fog_actions", 0)))
+	current_hull_hp = mini(current_hull_hp, max_hull_hp())
